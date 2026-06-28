@@ -1,1077 +1,945 @@
 import {
-  BadgeCheck,
-  Bell,
+  Apple,
+  BookOpen,
   Bookmark,
   BookmarkCheck,
   Camera,
+  Carrot,
   Check,
-  ChevronLeft,
   ChefHat,
+  ChevronLeft,
+  CircleDollarSign,
   ClipboardList,
   Coffee,
   CookingPot,
-  Flame,
+  Drumstick,
+  Fish,
   Heart,
-  Images,
-  ListPlus,
-  Plus,
+  Home,
+  Image,
+  Keyboard,
+  Leaf,
+  NotebookPen,
+  PackageCheck,
+  PenLine,
+  ReceiptText,
   Refrigerator,
-  Search,
-  ShoppingBasket,
+  Scale,
+  ShoppingBag,
+  SlidersHorizontal,
+  Snowflake,
   Sparkles,
-  Star,
+  Tags,
   Timer,
-  Trash2,
+  Upload,
   Utensils,
-  Wand2,
+  Wheat,
+  X,
 } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
-type StorageType = "fridge" | "freezer" | "pantry" | "seasoning";
-type Freshness = "fresh" | "normal" | "use-soon" | "expired";
-type View = "inventory" | "tools" | "recipes" | "favorites" | "cooked" | "shopping";
-type Category = "protein" | "vegetable" | "fruit" | "seasoning" | "staple" | "drink";
+const PRODUCT_VERSION = "v0.2.0";
+const VERSION_NAME = "晨光冰箱";
 
-type StockItem = {
+type View = "home" | "warehouse" | "recipes" | "diary";
+type UploadMethod = "photo" | "online" | "receipt" | "manual";
+type StorageZone = "fridge" | "freezer" | "room" | "seasoning";
+type AmountMode = "count" | "weight";
+type Freshness = "fresh" | "good" | "soon" | "danger";
+type RecipeFilter = "all" | "favorite" | "cooked";
+
+type FoodInfo = {
   id: string;
   name: string;
-  quantity: number;
+  level1: string;
+  level2: string;
+  level3: string;
+  photo: string;
+  storage: StorageZone;
+  storageTags: string[];
+  shelfLifeDays: number;
+  defaultMode: AmountMode;
+  defaultCount: number;
+  defaultWeight: number;
   unit: string;
-  storage: StorageType;
-  freshness: Freshness;
-  category: Category;
-  addedAt: string;
+  price: number;
+  caloriesPer100g: number;
+};
+
+type InventoryItem = FoodInfo & {
+  inventoryId: string;
+  amountMode: AmountMode;
+  amount: number;
+  pricePaid: number;
+  note: string;
+  addedDaysAgo: number;
+  customTags: string[];
+};
+
+type Recipe = {
+  id: string;
+  title: string;
+  cuisine: string;
+  difficulty: "轻松" | "认真" | "挑战";
+  minutes: number;
+  calories: number;
   image: string;
-  minQuantity?: number;
+  required: string[];
+  toolId: string;
+  reason: string;
+  steps: string[];
+};
+
+type DiaryEntry = {
+  id: string;
+  recipeTitle: string;
+  date: string;
+  source: string;
+  note: string;
+  tags: string[];
+};
+
+type ShoppingLine = {
+  id: string;
+  name: string;
+  reason: string;
+  owned: boolean;
 };
 
 type KitchenTool = {
   id: string;
   name: string;
-  group: "heat" | "steam" | "bake" | "drink" | "prep";
   subtitle: string;
+  tone: string;
   image: string;
 };
 
-type RecipeIdea = {
-  id: string;
-  title: string;
-  tool: string;
-  cuisine: string;
-  origin: string;
-  calories: number;
-  time: number;
-  difficulty: "低" | "中" | "高";
-  image: string;
-  why: string;
-  used: { id: string; amount: number; label: string }[];
-  missing: string[];
-  repeatList: string[];
-  steps: string[];
-};
+const fallbackImage =
+  "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 180'%3E%3Crect width='240' height='180' fill='%23fff6dc'/%3E%3Ccircle cx='120' cy='90' r='46' fill='%23d8eafa'/%3E%3Cpath d='M83 104c24-38 67-38 74 0' fill='none' stroke='%238ba6b8' stroke-width='8' stroke-linecap='round'/%3E%3C/svg%3E";
 
-type CookRecord = {
-  id: string;
-  recipe: RecipeIdea;
-  cookedAt: string;
-  rating: number;
-  photoNote: string;
-};
-
-type ShoppingItem = {
-  id: string;
-  name: string;
-  reason: string;
-  checked: boolean;
-};
-
-const storageLabels: Record<StorageType, string> = {
-  fridge: "冰箱",
-  freezer: "冷冻室",
-  pantry: "常温柜",
-  seasoning: "调料柜",
-};
-
-const freshnessLabels: Record<Freshness, string> = {
-  fresh: "新鲜",
-  normal: "正常",
-  "use-soon": "优先消耗",
-  expired: "已过期",
-};
-
-const cutout = (body: string, viewBox = "0 0 320 240") =>
+const localPhoto = (body: string) =>
   `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}">${body}</svg>`,
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180">${body}</svg>`,
   )}`;
 
-// Local transparent cutout asset catalog. OCR/photo recognition should map normalized item names to these keys.
-const assetCatalog = {
-  ingredients: {
-    egg: cutout(`
-      <defs><radialGradient id="g" cx="42%" cy="34%"><stop offset="0" stop-color="#fff0d2"/><stop offset="0.62" stop-color="#d78d45"/><stop offset="1" stop-color="#8f4c22"/></radialGradient></defs>
-      <ellipse cx="130" cy="116" rx="84" ry="58" fill="#8f4c22" opacity=".18"/>
-      <ellipse cx="96" cy="111" rx="35" ry="43" fill="url(#g)" transform="rotate(-16 96 111)"/>
-      <ellipse cx="138" cy="93" rx="36" ry="45" fill="url(#g)" transform="rotate(13 138 93)"/>
-      <ellipse cx="172" cy="120" rx="38" ry="46" fill="url(#g)" transform="rotate(-5 172 120)"/>
-      <ellipse cx="124" cy="142" rx="34" ry="42" fill="url(#g)" transform="rotate(10 124 142)"/>
-      <ellipse cx="90" cy="93" rx="12" ry="8" fill="#fff7e4" opacity=".58"/>
-      <ellipse cx="151" cy="78" rx="12" ry="8" fill="#fff7e4" opacity=".5"/>
-    `),
-    eggplant: cutout(`
-      <defs><linearGradient id="p" x1="48" x2="246" y1="120" y2="120"><stop stop-color="#2b173f"/><stop offset=".45" stop-color="#71238f"/><stop offset="1" stop-color="#2d153f"/></linearGradient></defs>
-      <path d="M71 135c35-49 113-76 165-53 23 10 24 31 5 53-35 41-122 57-168 28-12-8-11-17-2-28z" fill="url(#p)"/>
-      <path d="M77 129c34-32 87-52 132-46" fill="none" stroke="#b87ad1" stroke-width="9" stroke-linecap="round" opacity=".45"/>
-      <path d="M228 80c16-22 34-27 50-26-12 12-19 27-22 43-9-10-18-15-28-17z" fill="#506b32"/>
-      <path d="M218 86c21-9 36-3 46 12-21 0-37 5-50 20z" fill="#6f8b48"/>
-      <ellipse cx="116" cy="109" rx="12" ry="6" fill="#f1b7ff" opacity=".35" transform="rotate(-22 116 109)"/>
-    `),
-    pork: cutout(`
-      <defs><linearGradient id="m" x1="83" x2="232" y1="68" y2="181"><stop stop-color="#f4a18b"/><stop offset=".55" stop-color="#c96b61"/><stop offset="1" stop-color="#7d3739"/></linearGradient></defs>
-      <g fill="url(#m)">
-        <ellipse cx="126" cy="95" rx="35" ry="23"/><ellipse cx="166" cy="93" rx="42" ry="25"/><ellipse cx="199" cy="116" rx="36" ry="28"/>
-        <ellipse cx="111" cy="136" rx="38" ry="28"/><ellipse cx="157" cy="142" rx="47" ry="31"/><ellipse cx="204" cy="153" rx="36" ry="23"/>
-      </g>
-      <g fill="#ffd4c4" opacity=".55">
-        <ellipse cx="118" cy="88" rx="12" ry="5"/><ellipse cx="177" cy="91" rx="18" ry="6"/><ellipse cx="150" cy="132" rx="22" ry="6"/><ellipse cx="205" cy="141" rx="14" ry="5"/>
-      </g>
-      <g fill="#743639" opacity=".38">
-        <circle cx="95" cy="123" r="5"/><circle cx="139" cy="113" r="6"/><circle cx="184" cy="128" r="5"/><circle cx="222" cy="137" r="4"/>
-      </g>
-    `),
-    pepper: cutout(`
-      <defs><radialGradient id="r" cx="36%" cy="27%"><stop stop-color="#fff0aa"/><stop offset=".45" stop-color="#8aba36"/><stop offset="1" stop-color="#2f6e2f"/></radialGradient><radialGradient id="y" cx="38%" cy="28%"><stop stop-color="#fff0a3"/><stop offset=".58" stop-color="#f1bf30"/><stop offset="1" stop-color="#c66f19"/></radialGradient><radialGradient id="red" cx="38%" cy="28%"><stop stop-color="#ffb29e"/><stop offset=".55" stop-color="#d63a28"/><stop offset="1" stop-color="#8d211a"/></radialGradient></defs>
-      <g transform="rotate(-8 160 120)">
-        <path d="M117 63c18-18 48-9 53 16 19-15 48-2 48 24 0 42-38 72-84 65-40-6-64-45-50-77 7-18 20-27 33-28z" fill="url(#r)"/>
-        <path d="M118 72c16 25 9 65-18 87" fill="none" stroke="#6fa83a" stroke-width="5" opacity=".6"/>
-        <path d="M171 79c-9 33 3 61 28 82" fill="none" stroke="#61992e" stroke-width="5" opacity=".5"/>
-        <path d="M150 61c9-23 25-31 48-27-18 11-24 28-25 45z" fill="#49692e"/>
-      </g>
-      <circle cx="229" cy="147" r="30" fill="url(#red)"/>
-      <circle cx="240" cy="103" r="24" fill="url(#y)"/>
-    `),
-    peach: cutout(`
-      <defs><radialGradient id="peach" cx="34%" cy="27%"><stop stop-color="#fff0be"/><stop offset=".5" stop-color="#ef9f68"/><stop offset="1" stop-color="#c96a51"/></radialGradient></defs>
-      <path d="M168 55c54 4 79 57 55 103-21 41-83 55-121 28-43-31-34-96 11-122 18-11 37-14 55-9z" fill="url(#peach)"/>
-      <path d="M168 62c-21 35-19 75 8 119" fill="none" stroke="#b45245" stroke-width="5" opacity=".38"/>
-      <ellipse cx="118" cy="92" rx="21" ry="11" fill="#fff0c7" opacity=".5" transform="rotate(-29 118 92)"/>
-      <path d="M164 60c16-24 37-32 64-26-18 12-30 26-35 47-9-11-18-17-29-21z" fill="#6e8f4e"/>
-    `),
-    yangmei: cutout(`
-      <defs><radialGradient id="b" cx="34%" cy="29%"><stop stop-color="#ff8a95"/><stop offset=".48" stop-color="#bd2942"/><stop offset="1" stop-color="#65172f"/></radialGradient></defs>
-      <g fill="url(#b)">
-        <circle cx="115" cy="102" r="34"/><circle cx="155" cy="83" r="31"/><circle cx="196" cy="103" r="33"/>
-        <circle cx="132" cy="142" r="36"/><circle cx="177" cy="145" r="34"/><circle cx="220" cy="142" r="27"/>
-      </g>
-      <g fill="#ffbcc0" opacity=".48">
-        <circle cx="104" cy="91" r="4"/><circle cx="133" cy="113" r="3"/><circle cx="160" cy="72" r="4"/><circle cx="195" cy="96" r="3"/><circle cx="174" cy="142" r="4"/><circle cx="226" cy="135" r="3"/>
-      </g>
-      <path d="M139 61c13-16 30-19 50-15-12 8-22 18-29 32-6-8-13-13-21-17z" fill="#657b3f"/>
-    `),
-    rice: cutout(`
-      <defs><linearGradient id="bowl" x1="96" x2="226" y1="133" y2="180"><stop stop-color="#e6eef0"/><stop offset="1" stop-color="#8b9ba0"/></linearGradient></defs>
-      <ellipse cx="160" cy="102" rx="76" ry="38" fill="#fff"/>
-      <g fill="#f7f4e6"><ellipse cx="112" cy="98" rx="15" ry="7"/><ellipse cx="144" cy="86" rx="18" ry="8"/><ellipse cx="174" cy="95" rx="17" ry="7"/><ellipse cx="205" cy="106" rx="14" ry="6"/><ellipse cx="135" cy="116" rx="17" ry="8"/></g>
-      <path d="M72 115c7 53 42 78 88 78s81-25 88-78c-44 22-132 22-176 0z" fill="url(#bowl)"/>
-      <ellipse cx="160" cy="115" rx="88" ry="26" fill="none" stroke="#d6dee0" stroke-width="8"/>
-    `),
-    soy: cutout(`
-      <defs><linearGradient id="glass" x1="128" x2="192"><stop stop-color="#2a1712"/><stop offset=".5" stop-color="#5a2d20"/><stop offset="1" stop-color="#1c0e0b"/></linearGradient></defs>
-      <path d="M139 57h43l8 27v93c0 18-12 30-29 30s-30-12-30-30V84z" fill="url(#glass)"/>
-      <path d="M146 34h29v31h-29z" fill="#202020"/><path d="M140 29h41v12h-41z" fill="#3c3b38"/>
-      <rect x="137" y="99" width="49" height="58" rx="8" fill="#f4e5bd"/><path d="M147 116h29" stroke="#7f3f2b" stroke-width="7" stroke-linecap="round"/><path d="M148 137h27" stroke="#b9563a" stroke-width="5" stroke-linecap="round"/>
-      <path d="M145 72c5 35 4 80-1 118" stroke="#ffffff" stroke-width="5" opacity=".18" stroke-linecap="round"/>
-    `),
-    lemon: cutout(`
-      <defs><radialGradient id="l" cx="36%" cy="27%"><stop stop-color="#fff8bb"/><stop offset=".55" stop-color="#f4d13f"/><stop offset="1" stop-color="#d89c19"/></radialGradient></defs>
-      <circle cx="160" cy="120" r="70" fill="url(#l)"/>
-      <circle cx="160" cy="120" r="53" fill="#ffe88a" opacity=".7"/>
-      <g stroke="#f4c42d" stroke-width="4"><path d="M160 68v104"/><path d="M108 120h104"/><path d="M123 83l74 74"/><path d="M197 83l-74 74"/></g>
-      <circle cx="160" cy="120" r="9" fill="#f0b820"/>
-    `),
-    honey: cutout(`
-      <defs><linearGradient id="h" x1="86" x2="224"><stop stop-color="#ffcf3b"/><stop offset=".58" stop-color="#ee9c1a"/><stop offset="1" stop-color="#b35a11"/></linearGradient></defs>
-      <path d="M92 98c28-37 109-42 137-1 18 27-1 77-65 83-68 7-94-53-72-82z" fill="url(#h)"/>
-      <path d="M91 102c42 18 94 18 137-2" fill="none" stroke="#f8e183" stroke-width="12" opacity=".45"/>
-      <path d="M139 175c0 34 42 32 37 1z" fill="#d07312"/>
-      <g stroke="#8a4e12" stroke-width="4" opacity=".55"><path d="M122 95h34"/><path d="M116 113h48"/><path d="M121 132h36"/></g>
-    `),
-    coffee: cutout(`
-      <defs><linearGradient id="bean" x1="87" x2="229"><stop stop-color="#7a3f21"/><stop offset=".55" stop-color="#3b1c11"/><stop offset="1" stop-color="#160a06"/></linearGradient></defs>
-      <g fill="url(#bean)">
-        <ellipse cx="112" cy="104" rx="31" ry="45" transform="rotate(-24 112 104)"/><ellipse cx="160" cy="91" rx="31" ry="44" transform="rotate(12 160 91)"/><ellipse cx="209" cy="118" rx="31" ry="43" transform="rotate(29 209 118)"/>
-        <ellipse cx="143" cy="151" rx="30" ry="42" transform="rotate(-5 143 151)"/><ellipse cx="197" cy="162" rx="28" ry="39" transform="rotate(-20 197 162)"/>
-      </g>
-      <g stroke="#b87543" stroke-width="5" opacity=".55"><path d="M105 70c13 28 16 53 10 75"/><path d="M159 49c-8 27-8 55 2 84"/><path d="M223 86c-28 21-42 46-42 74"/></g>
-    `),
-    tofu: cutout(`
-      <defs><linearGradient id="t" x1="82" x2="220"><stop stop-color="#fff9da"/><stop offset="1" stop-color="#dcc98d"/></linearGradient></defs>
-      <path d="M86 91l90-42 76 44-92 48z" fill="#fff2b7"/>
-      <path d="M86 91v71l75 46v-67z" fill="url(#t)"/>
-      <path d="M161 141l91-48v67l-91 48z" fill="#d6bd79"/>
-      <g fill="#c8af70" opacity=".55"><circle cx="122" cy="120" r="5"/><circle cx="143" cy="151" r="4"/><circle cx="109" cy="160" r="4"/></g>
-    `),
-  },
-  tools: {
-    wok: cutout(`
-      <defs><linearGradient id="w" x1="65" x2="242"><stop stop-color="#61615c"/><stop offset=".55" stop-color="#222"/><stop offset="1" stop-color="#050505"/></linearGradient></defs>
-      <ellipse cx="145" cy="139" rx="88" ry="39" fill="url(#w)"/><ellipse cx="145" cy="126" rx="96" ry="28" fill="#3e3e3a"/><ellipse cx="145" cy="122" rx="73" ry="17" fill="#171717"/>
-      <path d="M224 124l64-39" stroke="#292724" stroke-width="17" stroke-linecap="round"/><path d="M63 126l-40-22" stroke="#343330" stroke-width="13" stroke-linecap="round"/>
-      <path d="M92 110c36 13 79 13 112 0" stroke="#8f8a7e" stroke-width="5" opacity=".45" stroke-linecap="round"/>
-    `),
-    steamer: cutout(`
-      <defs><linearGradient id="wood" x1="72" x2="240"><stop stop-color="#d9b37c"/><stop offset=".5" stop-color="#bd8652"/><stop offset="1" stop-color="#805234"/></linearGradient></defs>
-      <ellipse cx="160" cy="77" rx="74" ry="20" fill="#d9b37c"/><path d="M86 77h148v43c0 19-33 34-74 34s-74-15-74-34z" fill="url(#wood)"/>
-      <ellipse cx="160" cy="121" rx="74" ry="20" fill="#c99661"/><path d="M86 121h148v43c0 19-33 34-74 34s-74-15-74-34z" fill="url(#wood)"/>
-      <ellipse cx="160" cy="164" rx="74" ry="20" fill="#a86f44"/>
-      <g stroke="#7a4d2f" opacity=".5"><path d="M104 82v88"/><path d="M133 85v94"/><path d="M162 88v98"/><path d="M191 85v94"/><path d="M219 82v88"/></g>
-      <path d="M131 63c15-24 44-24 58 0" fill="none" stroke="#805234" stroke-width="9" stroke-linecap="round"/>
-    `),
-    oven: cutout(`
-      <defs><linearGradient id="o" x1="70" x2="250"><stop stop-color="#faf2e5"/><stop offset=".55" stop-color="#c9b29d"/><stop offset="1" stop-color="#6f625a"/></linearGradient></defs>
-      <rect x="65" y="55" width="190" height="137" rx="24" fill="url(#o)"/>
-      <rect x="91" y="83" width="100" height="78" rx="10" fill="#29251f"/>
-      <path d="M104 99h73v45h-73z" fill="#f2b56f" opacity=".65"/><path d="M98 167h86" stroke="#2f2b27" stroke-width="6" stroke-linecap="round"/>
-      <circle cx="219" cy="95" r="15" fill="#f8f1e6"/><circle cx="219" cy="137" r="15" fill="#f8f1e6"/><path d="M212 95h14M219 88v14M213 137h12" stroke="#685c52" stroke-width="3" stroke-linecap="round"/>
-    `),
-    induction: cutout(`
-      <defs><linearGradient id="i" x1="61" x2="259"><stop stop-color="#3b3c3d"/><stop offset=".5" stop-color="#111"/><stop offset="1" stop-color="#4e5355"/></linearGradient></defs>
-      <path d="M61 82h198l34 75H27z" fill="url(#i)"/><path d="M38 151h245v20H38z" fill="#171717"/>
-      <circle cx="124" cy="121" r="34" fill="none" stroke="#777" stroke-width="5" opacity=".5"/><circle cx="207" cy="123" r="24" fill="none" stroke="#777" stroke-width="4" opacity=".42"/>
-      <g fill="#b9e6ff"><circle cx="85" cy="157" r="3"/><circle cx="100" cy="157" r="3"/><circle cx="115" cy="157" r="3"/></g>
-    `),
-    juicer: cutout(`
-      <defs><linearGradient id="j" x1="96" x2="221"><stop stop-color="#dde7ec"/><stop offset=".5" stop-color="#a5bcc7"/><stop offset="1" stop-color="#5b6a70"/></linearGradient></defs>
-      <path d="M119 52h73l15 82c3 18-11 35-30 35h-42c-19 0-33-17-30-35z" fill="url(#j)" opacity=".85"/>
-      <path d="M126 74h63l8 55c2 15-9 28-25 28h-31c-16 0-28-14-25-30z" fill="#f5c05a" opacity=".7"/>
-      <path d="M119 52h84" stroke="#465056" stroke-width="9" stroke-linecap="round"/><path d="M137 38h44" stroke="#303438" stroke-width="12" stroke-linecap="round"/>
-      <rect x="104" y="167" width="105" height="45" rx="14" fill="#d9d1c8"/><circle cx="157" cy="190" r="11" fill="#36302b"/>
-    `),
-    soymilk: cutout(`
-      <defs><linearGradient id="s" x1="95" x2="216"><stop stop-color="#fff8ef"/><stop offset=".55" stop-color="#d8cabd"/><stop offset="1" stop-color="#8b8177"/></linearGradient></defs>
-      <path d="M111 63h93l18 116c3 19-12 35-31 35h-66c-19 0-34-16-31-35z" fill="url(#s)"/>
-      <path d="M122 85h75" stroke="#fff" stroke-width="10" opacity=".55" stroke-linecap="round"/>
-      <rect x="125" y="127" width="68" height="43" rx="12" fill="#252525"/><circle cx="159" cy="149" r="11" fill="#b8c67c"/><path d="M129 58h57" stroke="#45413d" stroke-width="13" stroke-linecap="round"/>
-      <path d="M205 94c40 3 48 62 9 76" fill="none" stroke="#8b8177" stroke-width="13" stroke-linecap="round"/>
-    `),
-    coffee: cutout(`
-      <defs><linearGradient id="c" x1="70" x2="244"><stop stop-color="#eee2d4"/><stop offset=".58" stop-color="#a89a8b"/><stop offset="1" stop-color="#4c4640"/></linearGradient></defs>
-      <rect x="74" y="56" width="171" height="111" rx="20" fill="url(#c)"/>
-      <rect x="102" y="87" width="68" height="35" rx="8" fill="#26221e"/><path d="M123 125h28v24h-28z" fill="#2b2520"/>
-      <path d="M113 148h51c8 0 13 6 11 14l-6 25h-61l-7-25c-2-8 4-14 12-14z" fill="#f3efe8"/>
-      <path d="M183 92h41" stroke="#2b2520" stroke-width="9" stroke-linecap="round"/><circle cx="203" cy="126" r="17" fill="#f6eee4"/><path d="M196 126h14" stroke="#5d544c" stroke-width="4" stroke-linecap="round"/>
-    `),
-    airfryer: cutout(`
-      <defs><linearGradient id="a" x1="92" x2="225"><stop stop-color="#f4efe8"/><stop offset=".5" stop-color="#d0c4b8"/><stop offset="1" stop-color="#6f6760"/></linearGradient></defs>
-      <path d="M96 62h128c13 0 24 11 24 24v87c0 23-18 41-41 41h-94c-23 0-41-18-41-41V86c0-13 11-24 24-24z" fill="url(#a)"/>
-      <rect x="103" y="94" width="114" height="68" rx="15" fill="#262522"/><path d="M120 111h78v34h-78z" fill="#e4b06b" opacity=".72"/>
-      <path d="M126 179h68" stroke="#fff7ec" stroke-width="11" stroke-linecap="round"/><circle cx="221" cy="82" r="10" fill="#2d2b28"/>
-    `),
-  },
-  recipes: {
-    eggplantRice: cutout(`
-      <ellipse cx="160" cy="144" rx="91" ry="46" fill="#f7f4ed"/><path d="M75 139c10 50 45 74 85 74s75-24 85-74c-42 23-128 23-170 0z" fill="#cad5d6"/><ellipse cx="160" cy="139" rx="91" ry="35" fill="#fff"/>
-      <g><ellipse cx="139" cy="117" rx="39" ry="18" fill="#6f3b2b" transform="rotate(-11 139 117)"/><ellipse cx="184" cy="120" rx="43" ry="18" fill="#7b412d" transform="rotate(10 184 120)"/><path d="M101 142c34-14 81-8 117 12" stroke="#c56f4f" stroke-width="14" stroke-linecap="round"/></g>
-      <g fill="#3b7a38"><ellipse cx="118" cy="104" rx="12" ry="7"/><ellipse cx="204" cy="101" rx="13" ry="7"/><ellipse cx="224" cy="137" rx="11" ry="7"/></g>
-      <circle cx="164" cy="112" r="13" fill="#f0d052"/><circle cx="164" cy="112" r="6" fill="#f6a62f"/>
-    `),
-    skilletEgg: cutout(`
-      <ellipse cx="148" cy="142" rx="92" ry="43" fill="#1d1c1a"/><ellipse cx="148" cy="132" rx="83" ry="35" fill="#2d2a25"/><path d="M226 131l68-29" stroke="#25231f" stroke-width="15" stroke-linecap="round"/>
-      <ellipse cx="145" cy="122" rx="63" ry="22" fill="#874630"/><circle cx="145" cy="117" r="28" fill="#fff4da"/><circle cx="148" cy="117" r="13" fill="#f2b431"/>
-      <g fill="#4d8d41"><ellipse cx="106" cy="116" rx="11" ry="6"/><ellipse cx="192" cy="116" rx="13" ry="6"/></g>
-    `),
-    pepperEgg: cutout(`
-      <ellipse cx="160" cy="151" rx="98" ry="44" fill="#f5f1ea"/><ellipse cx="160" cy="144" rx="80" ry="30" fill="#fff"/>
-      <g fill="#f2c33c"><ellipse cx="123" cy="127" rx="31" ry="18" transform="rotate(-12 123 127)"/><ellipse cx="168" cy="121" rx="34" ry="18" transform="rotate(10 168 121)"/><ellipse cx="197" cy="146" rx="28" ry="15" transform="rotate(-10 197 146)"/></g>
-      <g fill="#3e8b3d"><path d="M99 145c19-24 45-25 62-5-26 6-42 13-62 5z"/><path d="M174 101c25-5 43 8 51 30-22-9-38-12-51-30z"/></g>
-      <g fill="#8e4333"><circle cx="138" cy="145" r="8"/><circle cx="184" cy="136" r="7"/><circle cx="207" cy="155" r="6"/></g>
-    `),
-    peachDrink: cutout(`
-      <defs><linearGradient id="drink" x1="110" x2="210" y1="70" y2="208"><stop stop-color="#ffe2a4"/><stop offset=".55" stop-color="#ef8e6f"/><stop offset="1" stop-color="#b72d49"/></linearGradient></defs>
-      <path d="M106 58h108l-17 150c-2 15-16 26-37 26s-35-11-37-26z" fill="url(#drink)" opacity=".82"/><path d="M106 58h108" stroke="#f5f1ea" stroke-width="10" stroke-linecap="round"/>
-      <circle cx="144" cy="126" r="19" fill="#cf2544"/><circle cx="178" cy="109" r="17" fill="#f0a66c"/><circle cx="164" cy="157" r="13" fill="#fff" opacity=".42"/>
-      <path d="M195 36l-36 88" stroke="#8f6242" stroke-width="8" stroke-linecap="round"/><path d="M204 89c30-3 45 13 47 39" fill="none" stroke="#9bb664" stroke-width="8" stroke-linecap="round"/>
-    `),
-    yogurtBowl: cutout(`
-      <ellipse cx="160" cy="146" rx="99" ry="45" fill="#f7f2eb"/><path d="M70 144c10 48 47 72 90 72s80-24 90-72c-47 21-133 21-180 0z" fill="#d7d3cc"/><ellipse cx="160" cy="140" rx="94" ry="37" fill="#fff"/>
-      <g><circle cx="122" cy="128" r="20" fill="#b92442"/><circle cx="154" cy="116" r="18" fill="#ec9f65"/><circle cx="190" cy="132" r="18" fill="#bc2443"/></g>
-      <g stroke="#b98d48" stroke-width="6" stroke-linecap="round"><path d="M104 151l24 10"/><path d="M139 151l28 11"/><path d="M174 154l32 7"/></g>
-    `),
-    berrySauce: cutout(`
-      <defs><linearGradient id="jar" x1="96" x2="222"><stop stop-color="#ffffff"/><stop offset=".55" stop-color="#dfecf0"/><stop offset="1" stop-color="#96a7ad"/></linearGradient></defs>
-      <path d="M112 74h96l13 119c2 20-14 37-35 37h-52c-21 0-37-17-35-37z" fill="url(#jar)" opacity=".82"/>
-      <path d="M111 82h98v29h-98z" fill="#3b2a24"/><path d="M113 122h96v72c-24 18-71 18-96 0z" fill="#b62342" opacity=".86"/>
-      <g fill="#6b1430"><circle cx="136" cy="143" r="11"/><circle cx="171" cy="153" r="10"/><circle cx="189" cy="178" r="12"/></g>
-      <path d="M124 57h72" stroke="#e8e2d4" stroke-width="15" stroke-linecap="round"/>
-    `),
-  },
+const foodPhotos = {
+  egg: "https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=460&q=90",
+  eggplant: "https://images.unsplash.com/photo-1722501561648-b28829d2f289?auto=format&fit=crop&w=460&q=90",
+  pork: "https://images.unsplash.com/photo-1602470520998-f4a52199a3d6?auto=format&fit=crop&w=460&q=90",
+  pepper: "https://images.unsplash.com/photo-1563565375-f3fdfdbefa83?auto=format&fit=crop&w=460&q=90",
+  peach: "https://images.unsplash.com/photo-1517355352485-3c18847c2f7d?auto=format&fit=crop&w=460&q=90",
+  yangmei: localPhoto("<rect width='240' height='180' fill='#fff7e8'/><g filter='drop-shadow(0 10px 12px rgba(40,35,35,.22))'><circle cx='92' cy='93' r='28' fill='#b32645'/><circle cx='122' cy='75' r='25' fill='#ca3150'/><circle cx='148' cy='98' r='30' fill='#9e1f3c'/><circle cx='120' cy='119' r='27' fill='#d94b61'/><circle cx='170' cy='119' r='23' fill='#b52a44'/></g><g fill='#ffd0d4' opacity='.65'><circle cx='84' cy='84' r='4'/><circle cx='118' cy='68' r='4'/><circle cx='147' cy='92' r='3'/><circle cx='128' cy='118' r='4'/></g><path d='M114 51c14-14 32-16 52-11-16 8-25 19-30 33-6-10-13-16-22-22z' fill='#758c50'/>"),
+  rice: localPhoto("<rect width='240' height='180' fill='#f7fbff'/><ellipse cx='120' cy='75' rx='72' ry='32' fill='#fff'/><g fill='#f5f0dc'><ellipse cx='82' cy='74' rx='14' ry='6'/><ellipse cx='110' cy='62' rx='18' ry='7'/><ellipse cx='139' cy='72' rx='16' ry='7'/><ellipse cx='159' cy='86' rx='15' ry='6'/><ellipse cx='104' cy='92' rx='17' ry='7'/></g><path d='M48 88c8 43 35 66 72 66s64-23 72-66c-36 20-108 20-144 0z' fill='#d9e7ea'/><ellipse cx='120' cy='88' rx='76' ry='22' fill='none' stroke='#c6d8de' stroke-width='7'/>"),
+  soy: "https://images.unsplash.com/photo-1615485500704-8e990f9900f7?auto=format&fit=crop&w=460&q=90",
+  chickenWing: "https://images.unsplash.com/photo-1604503468506-a8da13d82791?auto=format&fit=crop&w=460&q=90",
+  chickenBreast: "https://images.unsplash.com/photo-1604503468506-a8da13d82791?auto=format&fit=crop&w=460&q=90",
+  beef: "https://images.unsplash.com/photo-1603048297172-c92544798d5a?auto=format&fit=crop&w=460&q=90",
+  tofu: "https://images.unsplash.com/photo-1617490888069-57f308d428d9?auto=format&fit=crop&w=460&q=90",
+  shrimp: "https://images.unsplash.com/photo-1565680018434-b513d5e5fd47?auto=format&fit=crop&w=460&q=90",
+  lettuce: "https://images.unsplash.com/photo-1622206151226-18ca2c9ab4a1?auto=format&fit=crop&w=460&q=90",
+  tomato: "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=460&q=90",
+  lemon: "https://images.unsplash.com/photo-1587496679742-bad502958fbf?auto=format&fit=crop&w=460&q=90",
 };
 
-const initialStock: StockItem[] = [
+const recipeImages = {
+  eggplantRice: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=720&q=90",
+  peachDrink: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=720&q=90",
+  steamedEgg: "https://images.unsplash.com/photo-1525351484163-7529414344d8?auto=format&fit=crop&w=720&q=90",
+  pepperEgg: "https://images.unsplash.com/photo-1495214783159-3503fd1b572d?auto=format&fit=crop&w=720&q=90",
+};
+
+const categoryTree = [
   {
-    id: "egg",
-    name: "鸡蛋",
-    quantity: 4,
-    unit: "个",
-    storage: "fridge",
-    freshness: "normal",
-    category: "protein",
-    addedAt: "今天",
-    image: assetCatalog.ingredients.egg,
-    minQuantity: 2,
+    level1: "肉禽蛋品",
+    icon: Drumstick,
+    level2: [
+      { name: "猪肉", level3: ["肉沫", "梅花肉", "排骨"] },
+      { name: "牛肉", level3: ["牛肉片", "牛腩", "牛排"] },
+      { name: "鸡肉", level3: ["鸡翅", "鸡爪", "鸡胸肉", "鸡腿肉"] },
+      { name: "蛋类", level3: ["鸡蛋", "鸭蛋"] },
+    ],
   },
   {
-    id: "eggplant",
-    name: "茄子",
-    quantity: 1,
-    unit: "根",
-    storage: "fridge",
-    freshness: "normal",
-    category: "vegetable",
-    addedAt: "昨天",
-    image: assetCatalog.ingredients.eggplant,
+    level1: "水果",
+    icon: Apple,
+    level2: [
+      { name: "桃李杏", level3: ["桃子", "黄桃"] },
+      { name: "浆果", level3: ["杨梅", "蓝莓"] },
+      { name: "柑橘", level3: ["柠檬", "橙子"] },
+    ],
   },
   {
-    id: "pork",
-    name: "肉沫",
-    quantity: 200,
-    unit: "g",
-    storage: "fridge",
-    freshness: "use-soon",
-    category: "protein",
-    addedAt: "前天",
-    image: assetCatalog.ingredients.pork,
+    level1: "蔬菜",
+    icon: Carrot,
+    level2: [
+      { name: "茄果瓜类", level3: ["茄子", "青椒", "番茄"] },
+      { name: "叶菜", level3: ["生菜", "小青菜"] },
+      { name: "菌菇", level3: ["香菇", "口蘑"] },
+    ],
   },
   {
-    id: "pepper",
-    name: "青椒",
-    quantity: 2,
-    unit: "个",
-    storage: "fridge",
-    freshness: "normal",
-    category: "vegetable",
-    addedAt: "昨天",
-    image: assetCatalog.ingredients.pepper,
+    level1: "豆制品",
+    icon: Leaf,
+    level2: [{ name: "豆腐豆干", level3: ["北豆腐", "嫩豆腐", "豆干"] }],
   },
   {
-    id: "peach",
-    name: "桃子",
-    quantity: 2,
-    unit: "个",
-    storage: "fridge",
-    freshness: "fresh",
-    category: "fruit",
-    addedAt: "今天",
-    image: assetCatalog.ingredients.peach,
+    level1: "海鲜水产",
+    icon: Fish,
+    level2: [
+      { name: "虾蟹", level3: ["鲜虾", "虾仁"] },
+      { name: "鱼类", level3: ["鲈鱼", "三文鱼"] },
+    ],
   },
   {
-    id: "yangmei",
-    name: "杨梅",
-    quantity: 1,
-    unit: "盒",
-    storage: "fridge",
-    freshness: "use-soon",
-    category: "fruit",
-    addedAt: "今天",
-    image: assetCatalog.ingredients.yangmei,
-  },
-  {
-    id: "rice",
-    name: "米饭",
-    quantity: 1,
-    unit: "碗",
-    storage: "pantry",
-    freshness: "normal",
-    category: "staple",
-    addedAt: "常备",
-    image: assetCatalog.ingredients.rice,
-    minQuantity: 1,
-  },
-  {
-    id: "soy",
-    name: "生抽",
-    quantity: 1,
-    unit: "瓶",
-    storage: "seasoning",
-    freshness: "normal",
-    category: "seasoning",
-    addedAt: "常备",
-    image: assetCatalog.ingredients.soy,
+    level1: "粮油调味",
+    icon: Wheat,
+    level2: [
+      { name: "主食", level3: ["米饭", "面条"] },
+      { name: "调味", level3: ["生抽", "蜂蜜", "橄榄油"] },
+    ],
   },
 ];
 
-const tools: KitchenTool[] = [
-  { id: "wok", name: "炒锅", group: "heat", subtitle: "爆炒 / 盖饭 / 热菜", image: assetCatalog.tools.wok },
-  { id: "steamer", name: "蒸锅", group: "steam", subtitle: "清蒸 / 蒸蛋 / 点心", image: assetCatalog.tools.steamer },
-  { id: "oven", name: "烤箱", group: "bake", subtitle: "烘烤 / 焗菜 / 甜点", image: assetCatalog.tools.oven },
-  { id: "induction", name: "电磁炉", group: "heat", subtitle: "小锅 / 汤面 / 一人食", image: assetCatalog.tools.induction },
-  { id: "juicer", name: "榨汁机", group: "drink", subtitle: "果汁 / 奶昔 / 沙冰", image: assetCatalog.tools.juicer },
-  { id: "soymilk", name: "豆浆机", group: "drink", subtitle: "豆浆 / 米糊 / 热饮", image: assetCatalog.tools.soymilk },
-  { id: "coffee", name: "咖啡机", group: "drink", subtitle: "咖啡 / 冷萃 / 特调", image: assetCatalog.tools.coffee },
-  { id: "airfryer", name: "空气炸锅", group: "bake", subtitle: "少油 / 烤物 / 快手", image: assetCatalog.tools.airfryer },
+const foodLibrary: FoodInfo[] = [
+  food("egg", "鸡蛋", "肉禽蛋品", "蛋类", "鸡蛋", foodPhotos.egg, "fridge", ["冷藏", "避免水洗后久放"], 30, "count", 6, 360, "个", 1.2, 143),
+  food("pork", "肉沫", "肉禽蛋品", "猪肉", "肉沫", foodPhotos.pork, "freezer", ["冷冻", "分装密封"], 60, "weight", 1, 250, "g", 8.8, 395),
+  food("chickenWing", "鸡翅", "肉禽蛋品", "鸡肉", "鸡翅", foodPhotos.chickenWing, "freezer", ["冷冻", "密封"], 90, "weight", 1, 500, "g", 18.9, 194),
+  food("chickenFeet", "鸡爪", "肉禽蛋品", "鸡肉", "鸡爪", foodPhotos.chickenWing, "freezer", ["冷冻", "密封"], 90, "weight", 1, 400, "g", 16.8, 215),
+  food("chickenBreast", "鸡胸肉", "肉禽蛋品", "鸡肉", "鸡胸肉", foodPhotos.chickenBreast, "freezer", ["冷冻", "低脂备餐"], 90, "weight", 1, 400, "g", 15.6, 165),
+  food("chickenLeg", "鸡腿肉", "肉禽蛋品", "鸡肉", "鸡腿肉", foodPhotos.chickenBreast, "freezer", ["冷冻", "去骨分装"], 90, "weight", 1, 500, "g", 17.9, 181),
+  food("beef", "牛肉片", "肉禽蛋品", "牛肉", "牛肉片", foodPhotos.beef, "freezer", ["冷冻", "分份"], 90, "weight", 1, 300, "g", 28.8, 250),
+  food("eggplant", "茄子", "蔬菜", "茄果瓜类", "茄子", foodPhotos.eggplant, "fridge", ["冷藏", "避免潮湿"], 5, "count", 1, 300, "根", 3.5, 25),
+  food("pepper", "青椒", "蔬菜", "茄果瓜类", "青椒", foodPhotos.pepper, "fridge", ["冷藏", "保鲜袋"], 7, "count", 2, 220, "个", 4.2, 22),
+  food("tomato", "番茄", "蔬菜", "茄果瓜类", "番茄", foodPhotos.tomato, "room", ["室温保存", "成熟后冷藏"], 6, "count", 3, 450, "个", 5.5, 18),
+  food("lettuce", "生菜", "蔬菜", "叶菜", "生菜", foodPhotos.lettuce, "fridge", ["冷藏", "厨房纸吸水"], 4, "count", 1, 350, "颗", 6.8, 16),
+  food("peach", "桃子", "水果", "桃李杏", "桃子", foodPhotos.peach, "fridge", ["冷藏", "单层摆放"], 5, "count", 2, 300, "个", 7.9, 42),
+  food("yangmei", "杨梅", "水果", "浆果", "杨梅", foodPhotos.yangmei, "fridge", ["冷藏", "优先食用"], 2, "weight", 1, 350, "g", 18.8, 30),
+  food("lemon", "柠檬", "水果", "柑橘", "柠檬", foodPhotos.lemon, "fridge", ["冷藏", "避光"], 21, "count", 2, 220, "个", 4.8, 37),
+  food("tofu", "北豆腐", "豆制品", "豆腐豆干", "北豆腐", foodPhotos.tofu, "fridge", ["冷藏", "泡水换水"], 3, "weight", 1, 400, "g", 4.5, 81),
+  food("shrimp", "鲜虾", "海鲜水产", "虾蟹", "鲜虾", foodPhotos.shrimp, "freezer", ["冷冻", "去虾线"], 60, "weight", 1, 300, "g", 24.8, 99),
+  food("rice", "米饭", "粮油调味", "主食", "米饭", foodPhotos.rice, "room", ["室温", "当天食用"], 1, "count", 1, 250, "碗", 2.0, 116),
+  food("soy", "生抽", "粮油调味", "调味", "生抽", foodPhotos.soy, "seasoning", ["避光", "避免潮湿"], 365, "count", 1, 500, "瓶", 12.0, 53),
 ];
 
-function generateRecipes(stock: StockItem[], selectedIds: string[], tool: KitchenTool): RecipeIdea[] {
-  const selected = stock.filter((item) => selectedIds.includes(item.id));
-  const names = selected.map((item) => item.name);
-  const has = (name: string) => names.includes(name);
-  const fruitMode = tool.group === "drink" || selected.some((item) => item.category === "fruit");
-
-  if (fruitMode) {
-    return [
-      {
-        id: "berry-peach-sparkle",
-        title: "杨梅桃子气泡饮",
-        tool: tool.name,
-        cuisine: "饮品",
-        origin: "现代冷饮",
-        calories: 138,
-        time: 8,
-        difficulty: "低",
-        image: assetCatalog.recipes.peachDrink,
-        why: "最推荐。优先消耗杨梅，桃子提供甜感，不开火也能完成一次库存转化。",
-        used: [
-          { id: "yangmei", amount: has("杨梅") ? 1 : 0, label: "杨梅半盒" },
-          { id: "peach", amount: has("桃子") ? 1 : 0, label: "桃子 1 个" },
-        ].filter((item) => item.amount > 0),
-        missing: ["气泡水", "冰块"],
-        repeatList: ["气泡水", "冰块", "薄荷"],
-        steps: ["杨梅轻压出汁，桃子切块。", "加入冰块和水果。", "倒入气泡水，静置 3 分钟。"],
-      },
-      {
-        id: "fruit-yogurt-bowl",
-        title: "杨梅桃子酸奶杯",
-        tool: "冷食",
-        cuisine: "甜品",
-        origin: "北欧早餐",
-        calories: 260,
-        time: 6,
-        difficulty: "低",
-        image: assetCatalog.recipes.yogurtBowl,
-        why: "无需厨具，适合把水果变成一份完整小餐。",
-        used: [
-          { id: "yangmei", amount: has("杨梅") ? 1 : 0, label: "杨梅半盒" },
-          { id: "peach", amount: has("桃子") ? 1 : 0, label: "桃子 1 个" },
-        ].filter((item) => item.amount > 0),
-        missing: ["酸奶"],
-        repeatList: ["酸奶", "燕麦片"],
-        steps: ["水果洗净切块。", "杯底铺酸奶。", "放入水果，按口味加蜂蜜。"],
-      },
-      {
-        id: "berry-sauce",
-        title: "杨梅桃子酸甜酱",
-        tool: "小锅",
-        cuisine: "酱汁",
-        origin: "法式果酱",
-        calories: 190,
-        time: 14,
-        difficulty: "中",
-        image: assetCatalog.recipes.berrySauce,
-        why: "把水果变成酱汁，可搭配煎蛋、烤肉或面包，扩大使用场景。",
-        used: [
-          { id: "yangmei", amount: has("杨梅") ? 1 : 0, label: "杨梅半盒" },
-          { id: "peach", amount: has("桃子") ? 1 : 0, label: "桃子半个" },
-        ].filter((item) => item.amount > 0),
-        missing: ["柠檬汁"],
-        repeatList: ["柠檬", "蜂蜜"],
-        steps: ["水果切小块入锅。", "小火压煮到出汁。", "加柠檬汁，收至微稠。"],
-      },
-    ];
-  }
-
-  return [
-    {
-      id: "eggplant-pork-rice",
-      title: "肉沫青椒茄子盖饭",
-      tool: tool.name,
-      cuisine: "家常",
-      origin: "中国家常菜",
-      calories: 520,
-      time: 18,
-      difficulty: "中",
-      image: assetCatalog.recipes.eggplantRice,
-      why: "最推荐。肉沫优先消耗，茄子和青椒形成完整热菜，配饭就是一餐。",
-      used: [
-        { id: "eggplant", amount: has("茄子") ? 1 : 0, label: "茄子 1 根" },
-        { id: "pork", amount: has("肉沫") ? 100 : 0, label: "肉沫 100g" },
-        { id: "pepper", amount: has("青椒") ? 1 : 0, label: "青椒 1 个" },
-      ].filter((item) => item.amount > 0),
-      missing: [],
-      repeatList: ["蒜", "葱", "米饭"],
-      steps: ["茄子切条，青椒切块。", "肉沫炒散，加生抽和少量水。", "放茄子焖软，再下青椒收汁。", "盖到米饭上。"],
-    },
-    {
-      id: "eggplant-egg-skillet",
-      title: "茄子肉沫温泉蛋小锅",
-      tool: tool.name,
-      cuisine: "创意家常",
-      origin: "日式小锅灵感",
-      calories: 430,
-      time: 22,
-      difficulty: "中",
-      image: assetCatalog.recipes.skilletEgg,
-      why: "用鸡蛋做口感层次，仍然低风险，适合想换个吃法。",
-      used: [
-        { id: "eggplant", amount: has("茄子") ? 1 : 0, label: "茄子 1 根" },
-        { id: "pork", amount: has("肉沫") ? 120 : 0, label: "肉沫 120g" },
-        { id: "egg", amount: has("鸡蛋") ? 1 : 0, label: "鸡蛋 1 个" },
-      ].filter((item) => item.amount > 0),
-      missing: ["葱花"],
-      repeatList: ["葱", "白芝麻"],
-      steps: ["肉沫炒香，加入茄子。", "加生抽和少量水焖 8 分钟。", "关火后打入鸡蛋，盖盖焖到半熟。", "拌开后配饭。"],
-    },
-    {
-      id: "pepper-egg",
-      title: "青椒炒蛋加肉沫",
-      tool: tool.name,
-      cuisine: "快手",
-      origin: "中国家常菜",
-      calories: 360,
-      time: 12,
-      difficulty: "低",
-      image: assetCatalog.recipes.pepperEgg,
-      why: "步骤短、洗碗少，适合懒得烧但想吃热菜的时候。",
-      used: [
-        { id: "pepper", amount: has("青椒") ? 1 : 0, label: "青椒 1 个" },
-        { id: "egg", amount: has("鸡蛋") ? 2 : 0, label: "鸡蛋 2 个" },
-        { id: "pork", amount: has("肉沫") ? 60 : 0, label: "肉沫 60g" },
-      ].filter((item) => item.amount > 0),
-      missing: [],
-      repeatList: ["鸡蛋"],
-      steps: ["鸡蛋打散先炒成块。", "肉沫炒散后下青椒。", "倒回鸡蛋，加生抽调味。"],
-    },
-  ];
+function food(
+  id: string,
+  name: string,
+  level1: string,
+  level2: string,
+  level3: string,
+  photo: string,
+  storage: StorageZone,
+  storageTags: string[],
+  shelfLifeDays: number,
+  defaultMode: AmountMode,
+  defaultCount: number,
+  defaultWeight: number,
+  unit: string,
+  price: number,
+  caloriesPer100g: number,
+): FoodInfo {
+  return {
+    id,
+    name,
+    level1,
+    level2,
+    level3,
+    photo,
+    storage,
+    storageTags,
+    shelfLifeDays,
+    defaultMode,
+    defaultCount,
+    defaultWeight,
+    unit,
+    price,
+    caloriesPer100g,
+  };
 }
 
+const kitchenTools: KitchenTool[] = [
+  { id: "wok", name: "复古炒锅", subtitle: "爆炒 / 盖饭", tone: "#c7dcef", image: foodPhotos.soy },
+  { id: "steamer", name: "白色蒸锅", subtitle: "蒸蛋 / 清蒸", tone: "#f4df9d", image: "/assets/tool-steamer-reference.png" },
+  { id: "oven", name: "奶油烤箱", subtitle: "焗烤 / 甜点", tone: "#f2c9bd", image: recipeImages.steamedEgg },
+  { id: "juicer", name: "果汁机", subtitle: "果汁 / 奶昔", tone: "#d6ead7", image: foodPhotos.lemon },
+  { id: "coffee", name: "复古咖啡机", subtitle: "咖啡 / 特调", tone: "#f6dfa6", image: "/assets/tool-coffee-reference.png" },
+];
+
+const initialInventory: InventoryItem[] = [
+  stocked("egg", 4, "count", 1, 4.8),
+  stocked("eggplant", 1, "count", 1, 3.5),
+  stocked("pork", 200, "weight", 2, 7.2),
+  stocked("pepper", 2, "count", 1, 4.2),
+  stocked("peach", 2, "count", 0, 7.9),
+  stocked("yangmei", 350, "weight", 1, 18.8),
+  stocked("rice", 1, "count", 0, 2),
+  stocked("soy", 1, "count", 20, 12),
+];
+
+function stocked(foodId: string, amount: number, mode: AmountMode, addedDaysAgo: number, pricePaid: number): InventoryItem {
+  const base = foodLibrary.find((item) => item.id === foodId);
+  if (!base) throw new Error(`Missing food ${foodId}`);
+  return {
+    ...base,
+    inventoryId: `${foodId}-${addedDaysAgo}`,
+    amount,
+    amountMode: mode,
+    pricePaid,
+    note: "",
+    addedDaysAgo,
+    customTags: [],
+  };
+}
+
+const recipesSeed: Recipe[] = [
+  {
+    id: "eggplant-pork-rice",
+    title: "肉沫青椒茄子盖饭",
+    cuisine: "江浙家常",
+    difficulty: "认真",
+    minutes: 18,
+    calories: 520,
+    image: recipeImages.eggplantRice,
+    required: ["茄子", "肉沫", "青椒", "米饭", "生抽"],
+    toolId: "wok",
+    reason: "把临期肉沫和茄子变成完整一餐，风险低但满足感高。",
+    steps: ["茄子切条，青椒切块。", "肉沫炒散，加生抽。", "放茄子焖软，下青椒收汁。", "盖到米饭上。"],
+  },
+  {
+    id: "yangmei-peach-soda",
+    title: "杨梅桃子气泡饮",
+    cuisine: "现代冷饮",
+    difficulty: "轻松",
+    minutes: 8,
+    calories: 138,
+    image: recipeImages.peachDrink,
+    required: ["杨梅", "桃子", "柠檬", "蜂蜜"],
+    toolId: "juicer",
+    reason: "不烧菜也能优先消耗好水果，适合一个人偷懒但想精致一点。",
+    steps: ["杨梅轻压出汁，桃子切块。", "加柠檬汁和少量蜂蜜。", "倒入气泡水或冰水。"],
+  },
+  {
+    id: "steamed-egg",
+    title: "青椒肉沫蒸蛋",
+    cuisine: "中式蒸菜",
+    difficulty: "轻松",
+    minutes: 15,
+    calories: 310,
+    image: recipeImages.steamedEgg,
+    required: ["鸡蛋", "肉沫", "青椒", "生抽"],
+    toolId: "steamer",
+    reason: "洗碗少，口感软，适合冰箱里东西不多的时候。",
+    steps: ["鸡蛋加温水打散。", "肉沫炒香铺底。", "蒸 10 分钟后撒青椒碎和生抽。"],
+  },
+  {
+    id: "pepper-egg",
+    title: "青椒炒蛋",
+    cuisine: "快手家常",
+    difficulty: "轻松",
+    minutes: 10,
+    calories: 260,
+    image: recipeImages.pepperEgg,
+    required: ["青椒", "鸡蛋", "生抽"],
+    toolId: "wok",
+    reason: "最短路径解决“今天不知道吃什么”。",
+    steps: ["鸡蛋先炒成大块。", "青椒炒到断生。", "倒回鸡蛋，加生抽调味。"],
+  },
+];
+
+const uploadMethods = [
+  { id: "photo", label: "拍照识别", icon: Camera, note: "适合冰箱现场拍摄，AI 识别后自动填充。" },
+  { id: "online", label: "线上截图", icon: Image, note: "适合外卖买菜、盒马、叮咚订单截图。" },
+  { id: "receipt", label: "小票", icon: ReceiptText, note: "适合线下超市购物小票。" },
+  { id: "manual", label: "手动输入", icon: Keyboard, note: "最快补录，分类和默认值自动带出。" },
+] satisfies { id: UploadMethod; label: string; icon: typeof Camera; note: string }[];
+
+const personaLibrary = [
+  { name: "晨光冰箱长", min: 76, desc: "库存结构清楚，做饭节奏稳定，适合开始养成自己的菜谱库。" },
+  { name: "杨梅灵感师", min: 62, desc: "会被好食材点燃灵感，适合多做跨菜系尝试。" },
+  { name: "冷藏巡逻员", min: 48, desc: "库存意识已经出现，但临期食材需要更主动处理。" },
+  { name: "随缘开火人", min: 0, desc: "先把“今天吃什么”跑起来，别再靠意志力做饭。" },
+];
+
 function App() {
-  const [view, setView] = useState<View>("inventory");
-  const [stock, setStock] = useState<StockItem[]>(initialStock);
-  const [selectedIds, setSelectedIds] = useState<string[]>(["eggplant", "pork", "pepper"]);
+  const [view, setView] = useState<View>("home");
+  const [inventory, setInventory] = useState<InventoryItem[]>(initialInventory);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadClosing, setUploadClosing] = useState(false);
+  const [uploadDone, setUploadDone] = useState(false);
+  const [method, setMethod] = useState<UploadMethod>("manual");
+  const [level1, setLevel1] = useState("肉禽蛋品");
+  const [level2, setLevel2] = useState("鸡肉");
+  const [selectedFoodId, setSelectedFoodId] = useState("chickenWing");
+  const [amountMode, setAmountMode] = useState<AmountMode>("weight");
+  const [amount, setAmount] = useState(500);
+  const [price, setPrice] = useState(18.9);
+  const [note, setNote] = useState("冷冻分装");
+  const [fridgeOpen, setFridgeOpen] = useState(false);
   const [activeToolId, setActiveToolId] = useState("wok");
-  const [recipes, setRecipes] = useState<RecipeIdea[]>([]);
-  const [featuredRecipe, setFeaturedRecipe] = useState<RecipeIdea | null>(null);
-  const [openTutorialId, setOpenTutorialId] = useState<string | null>(null);
-  const [favorites, setFavorites] = useState<RecipeIdea[]>([]);
-  const [records, setRecords] = useState<CookRecord[]>([]);
-  const [shopping, setShopping] = useState<ShoppingItem[]>([]);
-  const [query, setQuery] = useState("");
-  const [isAdding, setIsAdding] = useState(false);
+  const [favorites, setFavorites] = useState<string[]>(["eggplant-pork-rice"]);
+  const [cookedIds, setCookedIds] = useState<string[]>(["pepper-egg"]);
+  const [recipeFilter, setRecipeFilter] = useState<RecipeFilter>("all");
+  const [cuisineFilter, setCuisineFilter] = useState("全部");
+  const [shoppingList, setShoppingList] = useState<ShoppingLine[]>([]);
+  const [diary, setDiary] = useState<DiaryEntry[]>([
+    {
+      id: "diary-1",
+      recipeTitle: "青椒炒蛋",
+      date: "昨天",
+      source: "做过的菜",
+      note: "下次可以加一点肉沫，口感更完整。",
+      tags: ["快手", "家常", "低洗碗"],
+    },
+  ]);
 
-  const activeTool = tools.find((tool) => tool.id === activeToolId) ?? tools[0];
-  const availableStock = stock.filter((item) => item.quantity > 0);
-  const selectedItems = availableStock.filter((item) => selectedIds.includes(item.id));
-  const filteredStock = availableStock.filter((item) => item.name.includes(query.trim()));
-  const useSoonCount = availableStock.filter((item) => item.freshness === "use-soon").length;
-  const favoriteIds = new Set(favorites.map((recipe) => recipe.id));
+  const selectedFood = foodLibrary.find((item) => item.id === selectedFoodId) ?? foodLibrary[0];
+  const selectedTool = kitchenTools.find((tool) => tool.id === activeToolId) ?? kitchenTools[0];
 
-  const shoppingFromRecipes = useMemo(
-    () => shopping.filter((item) => !item.checked),
-    [shopping],
-  );
-
-  function toggleSelected(id: string) {
-    setSelectedIds((current) =>
-      current.includes(id) ? current.filter((itemId) => itemId !== id) : [...current, id],
+  const stats = useMemo(() => {
+    const storedScore = Math.min(100, Math.round((inventory.length / 14) * 100));
+    const cookFrequency = 4;
+    const cookedCount = diary.length + cookedIds.length;
+    const freshnessScore = Math.round(
+      inventory.reduce((sum, item) => sum + freshnessPercent(item), 0) / Math.max(inventory.length, 1),
     );
+    const total = Math.round(storedScore * 0.32 + cookFrequency * 10 * 0.28 + cookedCount * 10 * 0.2 + freshnessScore * 0.2);
+    const persona = personaLibrary.find((item) => total >= item.min) ?? personaLibrary[personaLibrary.length - 1];
+    return { storedScore, cookFrequency, cookedCount, freshnessScore, total, persona };
+  }, [cookedIds.length, diary.length, inventory]);
+
+  const filteredRecipes = recipesSeed.filter((recipe) => {
+    const byMode =
+      recipeFilter === "all" ||
+      (recipeFilter === "favorite" && favorites.includes(recipe.id)) ||
+      (recipeFilter === "cooked" && cookedIds.includes(recipe.id));
+    const byCuisine = cuisineFilter === "全部" || recipe.cuisine === cuisineFilter;
+    return byMode && byCuisine;
+  });
+
+  const cuisineOptions = ["全部", ...Array.from(new Set(recipesSeed.map((recipe) => recipe.cuisine)))];
+
+  function openUpload() {
+    setUploadOpen(true);
+    setUploadClosing(false);
+    setUploadDone(false);
   }
 
-  function generate() {
-    const generated = generateRecipes(availableStock, selectedIds, activeTool);
-    setRecipes(generated);
-    setFeaturedRecipe(generated[0] ?? null);
-    setOpenTutorialId(null);
-    setView("recipes");
+  function closeUpload() {
+    setUploadClosing(true);
+    window.setTimeout(() => {
+      setUploadOpen(false);
+      setUploadClosing(false);
+      setUploadDone(false);
+    }, 260);
   }
 
-  function toggleFavorite(recipe: RecipeIdea) {
+  function completeUpload() {
+    setUploadDone(true);
+    window.setTimeout(() => {
+      const nextItem: InventoryItem = {
+        ...selectedFood,
+        inventoryId: `${selectedFood.id}-${Date.now()}`,
+        amountMode,
+        amount,
+        pricePaid: price,
+        note,
+        addedDaysAgo: 0,
+        customTags: note ? [note] : [],
+      };
+      setInventory((current) => [nextItem, ...current]);
+      setUploadOpen(false);
+      setUploadDone(false);
+      setView("warehouse");
+      setFridgeOpen(true);
+    }, 560);
+  }
+
+  function selectFood(foodId: string) {
+    const next = foodLibrary.find((item) => item.id === foodId);
+    if (!next) return;
+    setSelectedFoodId(foodId);
+    setAmountMode(next.defaultMode);
+    setAmount(next.defaultMode === "count" ? next.defaultCount : next.defaultWeight);
+    setPrice(next.price);
+    setNote(next.storageTags[0] ?? "");
+  }
+
+  function chooseLevel1(nextLevel1: string) {
+    const nextL2 = categoryTree.find((item) => item.level1 === nextLevel1)?.level2[0]?.name;
+    const nextFood = foodLibrary.find((item) => item.level1 === nextLevel1 && item.level2 === nextL2);
+    setLevel1(nextLevel1);
+    if (nextL2) setLevel2(nextL2);
+    if (nextFood) selectFood(nextFood.id);
+  }
+
+  function chooseLevel2(nextLevel2: string) {
+    const nextFood = foodLibrary.find((item) => item.level1 === level1 && item.level2 === nextLevel2);
+    setLevel2(nextLevel2);
+    if (nextFood) selectFood(nextFood.id);
+  }
+
+  function toggleFavorite(recipeId: string) {
     setFavorites((current) =>
-      current.some((item) => item.id === recipe.id)
-        ? current.filter((item) => item.id !== recipe.id)
-        : [recipe, ...current],
+      current.includes(recipeId) ? current.filter((id) => id !== recipeId) : [recipeId, ...current],
     );
   }
 
-  function addWantedRecipe(recipe: RecipeIdea, source: string) {
-    const nextItems = [...recipe.missing, ...recipe.repeatList].map((name) => ({
-      id: `${recipe.id}-${source}-${name}-${Date.now()}`,
+  function planToday(recipe: Recipe, source: string) {
+    const ownedNames = new Set(inventory.map((item) => item.name));
+    const lines = recipe.required.map((name) => ({
+      id: `${recipe.id}-${name}-${Date.now()}`,
       name,
-      reason: `想做《${recipe.title}》`,
-      checked: false,
+      reason: `今天吃《${recipe.title}》`,
+      owned: ownedNames.has(name),
     }));
-    setShopping((current) => {
-      const names = new Set(current.map((item) => item.name));
-      return [...current, ...nextItems.filter((item) => !names.has(item.name))];
-    });
-    setView("shopping");
-  }
-
-  function cookRecipe(recipe: RecipeIdea) {
-    setStock((current) =>
-      current.map((item) => {
-        const usage = recipe.used.find((used) => used.id === item.id);
-        if (!usage) return item;
-        return { ...item, quantity: Math.max(0, Number((item.quantity - usage.amount).toFixed(2))) };
-      }),
+    const missingLines = lines.filter((line) => !line.owned);
+    setShoppingList(
+      missingLines.length
+        ? missingLines
+        : [{ id: `${recipe.id}-covered-${Date.now()}`, name: "库存已覆盖全部食材", reason: `《${recipe.title}》无需额外采购`, owned: false }],
     );
-    setRecords((current) => [
+    setDiary((current) => [
       {
         id: `${recipe.id}-${Date.now()}`,
-        recipe,
-        cookedAt: "刚刚",
-        rating: 92,
-        photoNote: "可上传成品照，AI 评分和生成贴图记录。",
+        recipeTitle: recipe.title,
+        date: "今天",
+        source,
+        note: `由 ${source} 加入今日计划；缺口食材已自动减去库存。`,
+        tags: [recipe.cuisine, recipe.difficulty, selectedTool.name],
       },
       ...current,
     ]);
-    setSelectedIds([]);
-    setOpenTutorialId(null);
-    setView("cooked");
-  }
-
-  function addStockItem(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const name = String(formData.get("name") || "").trim();
-    const quantity = Number(formData.get("quantity") || 1);
-    const unit = String(formData.get("unit") || "份").trim();
-    const storage = String(formData.get("storage") || "fridge") as StorageType;
-    if (!name) return;
-    setStock((current) => [
-      {
-        id: `${name}-${Date.now()}`,
-        name,
-        quantity,
-        unit,
-        storage,
-        freshness: "normal",
-        category: "vegetable",
-        addedAt: "刚刚",
-        image: assetCatalog.ingredients.lemon,
-      },
-      ...current,
-    ]);
-    setIsAdding(false);
-    event.currentTarget.reset();
+    setCookedIds((current) => (current.includes(recipe.id) ? current : [recipe.id, ...current]));
+    setView("diary");
   }
 
   return (
     <div className="appShell">
       <div className="appFrame">
         <header className="topbar">
-          <button className="brandButton" onClick={() => setView("inventory")} type="button">
+          <button className="brandButton" type="button" onClick={() => setView("home")}>
             <span className="brandMark">M</span>
             <span>
               <strong>Miiix</strong>
-              <small>inventory to recipes</small>
+              <small>{PRODUCT_VERSION} {VERSION_NAME}</small>
             </span>
           </button>
-          <div className="topbarActions">
-            <button className="softIcon" type="button" aria-label="拍照识别入口">
-              <Camera size={18} />
-            </button>
-            <button className="softIcon" type="button" aria-label="临期提醒">
-              <Bell size={18} />
-              {useSoonCount > 0 && <span className="dot">{useSoonCount}</span>}
-            </button>
-          </div>
+          <div className="versionPill">{VERSION_NAME}</div>
         </header>
 
         <main className="screen">
-          {view === "inventory" && (
-            <InventoryView
-              stock={filteredStock}
-              selectedIds={selectedIds}
-              query={query}
-              setQuery={setQuery}
-              toggleSelected={toggleSelected}
-              selectedItems={selectedItems}
-              isAdding={isAdding}
-              setIsAdding={setIsAdding}
-              addStockItem={addStockItem}
-              onGenerate={generate}
-              onTools={() => setView("tools")}
+          {view === "home" && (
+            <HomeView
+              stats={stats}
+              inventory={inventory}
+              openUpload={openUpload}
+              fridgeOpen={fridgeOpen}
+              setFridgeOpen={setFridgeOpen}
+              setView={setView}
             />
           )}
-          {view === "tools" && (
-            <ToolsView
-              tools={tools}
+          {view === "warehouse" && (
+            <WarehouseView
+              inventory={inventory}
+              fridgeOpen={fridgeOpen}
+              setFridgeOpen={setFridgeOpen}
               activeToolId={activeToolId}
               setActiveToolId={setActiveToolId}
-              selectedItems={selectedItems}
-              onGenerate={generate}
+              selectedTool={selectedTool}
+              shoppingList={shoppingList}
+              planToday={planToday}
             />
           )}
           {view === "recipes" && (
             <RecipesView
-              recipes={recipes}
-              featuredRecipe={featuredRecipe}
-              favoriteIds={favoriteIds}
-              openTutorialId={openTutorialId}
-              setOpenTutorialId={setOpenTutorialId}
+              recipes={filteredRecipes}
+              recipeFilter={recipeFilter}
+              setRecipeFilter={setRecipeFilter}
+              cuisineFilter={cuisineFilter}
+              setCuisineFilter={setCuisineFilter}
+              cuisineOptions={cuisineOptions}
+              favorites={favorites}
+              cookedIds={cookedIds}
               toggleFavorite={toggleFavorite}
-              cookRecipe={cookRecipe}
-              addWantedRecipe={addWantedRecipe}
-              onBack={() => setView("tools")}
+              planToday={planToday}
             />
           )}
-          {view === "favorites" && (
-            <RecipeCollection
-              title="我的收藏"
-              empty="收藏菜谱后会放在这里，用来生成想做清单。"
-              recipes={favorites}
-              favoriteIds={favoriteIds}
-              openTutorialId={openTutorialId}
-              setOpenTutorialId={setOpenTutorialId}
-              toggleFavorite={toggleFavorite}
-              cookRecipe={cookRecipe}
-              addWantedRecipe={addWantedRecipe}
-            />
-          )}
-          {view === "cooked" && <CookedView records={records} addWantedRecipe={addWantedRecipe} />}
-          {view === "shopping" && (
-            <ShoppingView shopping={shoppingFromRecipes} setShopping={setShopping} />
-          )}
+          {view === "diary" && <DiaryView diary={diary} shoppingList={shoppingList} />}
         </main>
 
         <nav className="bottomNav" aria-label="主导航">
-          <NavButton icon={<Refrigerator size={19} />} label="库存" active={view === "inventory"} onClick={() => setView("inventory")} />
-          <NavButton icon={<Utensils size={19} />} label="厨具" active={view === "tools"} onClick={() => setView("tools")} />
-          <NavButton icon={<Bookmark size={19} />} label="收藏" active={view === "favorites"} onClick={() => setView("favorites")} />
-          <NavButton icon={<ChefHat size={19} />} label="我的菜谱" active={view === "cooked"} onClick={() => setView("cooked")} />
-          <NavButton icon={<ShoppingBasket size={19} />} label="清单" active={view === "shopping"} onClick={() => setView("shopping")} />
+          <NavButton icon={<Home size={19} />} label="主页" active={view === "home"} onClick={() => setView("home")} />
+          <NavButton icon={<Refrigerator size={19} />} label="仓库" active={view === "warehouse"} onClick={() => setView("warehouse")} />
+          <NavButton icon={<BookOpen size={19} />} label="菜谱" active={view === "recipes"} onClick={() => setView("recipes")} />
+          <NavButton icon={<NotebookPen size={19} />} label="日记" active={view === "diary"} onClick={() => setView("diary")} />
         </nav>
+      </div>
+
+      {uploadOpen && (
+        <UploadSheet
+          closing={uploadClosing}
+          done={uploadDone}
+          method={method}
+          setMethod={setMethod}
+          level1={level1}
+          level2={level2}
+          chooseLevel1={chooseLevel1}
+          chooseLevel2={chooseLevel2}
+          selectedFood={selectedFood}
+          selectFood={selectFood}
+          amountMode={amountMode}
+          setAmountMode={setAmountMode}
+          amount={amount}
+          setAmount={setAmount}
+          price={price}
+          setPrice={setPrice}
+          note={note}
+          setNote={setNote}
+          onBack={closeUpload}
+          onDone={completeUpload}
+        />
+      )}
+    </div>
+  );
+}
+
+function HomeView({
+  stats,
+  inventory,
+  openUpload,
+  fridgeOpen,
+  setFridgeOpen,
+  setView,
+}: {
+  stats: ReturnType<typeof useMemo> extends never ? never : {
+    storedScore: number;
+    cookFrequency: number;
+    cookedCount: number;
+    freshnessScore: number;
+    total: number;
+    persona: { name: string; desc: string; min: number };
+  };
+  inventory: InventoryItem[];
+  openUpload: () => void;
+  fridgeOpen: boolean;
+  setFridgeOpen: (value: boolean) => void;
+  setView: (view: View) => void;
+}) {
+  return (
+    <section className="homeStack">
+      <div className="profilePanel">
+        <div>
+          <p className="eyebrow">Hannah's kitchen</p>
+          <h1>早上好，Hannah</h1>
+          <p>{stats.persona.desc}</p>
+          <div className="levelBadge"><Sparkles size={15} /> {stats.persona.name}</div>
+        </div>
+        <div className="scoreOrb">
+          <strong>{stats.total}</strong>
+          <span>厨房生命力</span>
+        </div>
+      </div>
+
+      <div className="metricGrid">
+        <Metric label="库存整理" value={stats.storedScore} suffix="%" />
+        <Metric label="做饭频率" value={stats.cookFrequency} suffix="次/周" />
+        <Metric label="做过的菜" value={stats.cookedCount} suffix="道" />
+        <Metric label="新鲜度" value={stats.freshnessScore} suffix="%" />
+      </div>
+
+      <button className="uploadEntry" type="button" onClick={openUpload}>
+        <span><Upload size={22} /> 上传食材</span>
+        <small>拍照、截图、小票、手动输入都从这里进入</small>
+      </button>
+
+      <div className="homeWarehouse">
+        <div className="sectionHeader compactHeader">
+          <div>
+            <p className="eyebrow">Warehouse view</p>
+            <h2>打开冰箱看看</h2>
+          </div>
+          <button className="ghostButton" type="button" onClick={() => setView("warehouse")}>进入仓库</button>
+        </div>
+        <FridgeScene inventory={inventory} open={fridgeOpen} onToggle={() => setFridgeOpen(!fridgeOpen)} />
+      </div>
+    </section>
+  );
+}
+
+function UploadSheet({
+  closing,
+  done,
+  method,
+  setMethod,
+  level1,
+  level2,
+  chooseLevel1,
+  chooseLevel2,
+  selectedFood,
+  selectFood,
+  amountMode,
+  setAmountMode,
+  amount,
+  setAmount,
+  price,
+  setPrice,
+  note,
+  setNote,
+  onBack,
+  onDone,
+}: {
+  closing: boolean;
+  done: boolean;
+  method: UploadMethod;
+  setMethod: (method: UploadMethod) => void;
+  level1: string;
+  level2: string;
+  chooseLevel1: (value: string) => void;
+  chooseLevel2: (value: string) => void;
+  selectedFood: FoodInfo;
+  selectFood: (id: string) => void;
+  amountMode: AmountMode;
+  setAmountMode: (mode: AmountMode) => void;
+  amount: number;
+  setAmount: (value: number) => void;
+  price: number;
+  setPrice: (value: number) => void;
+  note: string;
+  setNote: (value: string) => void;
+  onBack: () => void;
+  onDone: () => void;
+}) {
+  const secondLevels = categoryTree.find((item) => item.level1 === level1)?.level2 ?? [];
+  const visibleFoods = foodLibrary.filter((item) => item.level1 === level1 && item.level2 === level2);
+  const isAiMethod = method !== "manual";
+
+  return (
+    <div className={`uploadOverlay ${closing ? "closing" : ""} ${done ? "done" : ""}`}>
+      <div className="uploadCard">
+        <div className="uploadCardInner">
+          <div className="uploadFace uploadFront">
+            <header className="uploadHeader">
+              <button type="button" onClick={onBack}><ChevronLeft size={20} /> 返回</button>
+              <strong>上传食材</strong>
+              <button type="button" onClick={onDone}>完成 <Check size={18} /></button>
+            </header>
+
+            <div className="methodGrid">
+              {uploadMethods.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    className={method === item.id ? "active" : ""}
+                    key={item.id}
+                    type="button"
+                    onClick={() => setMethod(item.id)}
+                  >
+                    <Icon size={20} />
+                    <span>{item.label}</span>
+                    <small>{item.note}</small>
+                  </button>
+                );
+              })}
+            </div>
+
+            {isAiMethod && (
+              <div className="aiResult">
+                <Sparkles size={18} />
+                <div>
+                  <strong>AI 已预填：{selectedFood.name}</strong>
+                  <p>{methodText(method)}。你仍然可以手动矫正分类、数量、储存方式和价格。</p>
+                </div>
+              </div>
+            )}
+
+            <CategoryPicker
+              level1={level1}
+              level2={level2}
+              secondLevels={secondLevels}
+              visibleFoods={visibleFoods}
+              selectedFood={selectedFood}
+              chooseLevel1={chooseLevel1}
+              chooseLevel2={chooseLevel2}
+              selectFood={selectFood}
+            />
+
+            <FoodEditor
+              selectedFood={selectedFood}
+              amountMode={amountMode}
+              setAmountMode={setAmountMode}
+              amount={amount}
+              setAmount={setAmount}
+              price={price}
+              setPrice={setPrice}
+              note={note}
+              setNote={setNote}
+            />
+          </div>
+          <div className="uploadFace uploadBack">
+            <PackageCheck size={42} />
+            <h2>{selectedFood.name} 已进入仓库</h2>
+            <p>根据食材库默认值，已带入储存方式、保质期、数量和价格。现在跳转到仓库检查摆放。</p>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function InventoryView({
-  stock,
-  selectedIds,
-  query,
-  setQuery,
-  toggleSelected,
-  selectedItems,
-  isAdding,
-  setIsAdding,
-  addStockItem,
-  onGenerate,
-  onTools,
+function CategoryPicker({
+  level1,
+  level2,
+  secondLevels,
+  visibleFoods,
+  selectedFood,
+  chooseLevel1,
+  chooseLevel2,
+  selectFood,
 }: {
-  stock: StockItem[];
-  selectedIds: string[];
-  query: string;
-  setQuery: (value: string) => void;
-  toggleSelected: (id: string) => void;
-  selectedItems: StockItem[];
-  isAdding: boolean;
-  setIsAdding: (value: boolean) => void;
-  addStockItem: (event: FormEvent<HTMLFormElement>) => void;
-  onGenerate: () => void;
-  onTools: () => void;
+  level1: string;
+  level2: string;
+  secondLevels: { name: string; level3: string[] }[];
+  visibleFoods: FoodInfo[];
+  selectedFood: FoodInfo;
+  chooseLevel1: (value: string) => void;
+  chooseLevel2: (value: string) => void;
+  selectFood: (id: string) => void;
 }) {
   return (
-    <section>
-      <div className="sectionHeader">
-        <div>
-          <p className="eyebrow">Inventory assets</p>
-          <h1 className="pageTitle">冰箱库存</h1>
-          <p className="pageSub">今日库存：优先处理临期食材，保留采买日期和数量。</p>
-        </div>
-        <button className="softIcon large" onClick={() => setIsAdding(!isAdding)} type="button" aria-label="添加食材">
-          <Plus size={22} />
-        </button>
+    <div className="categoryBlock">
+      <div className="railTags">
+        {categoryTree.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button className={level1 === item.level1 ? "active" : ""} type="button" key={item.level1} onClick={() => chooseLevel1(item.level1)}>
+              <Icon size={15} /> {item.level1}
+            </button>
+          );
+        })}
       </div>
-
-      <div className="scanStrip">
-        <button type="button"><Camera size={17} /> 拍照识别</button>
-        <button type="button"><Images size={17} /> 上传小票</button>
-        <button type="button"><ListPlus size={17} /> 手动添加</button>
-      </div>
-
-      <label className="searchBox">
-        <Search size={18} />
-        <input placeholder="搜索食材" value={query} onChange={(event) => setQuery(event.target.value)} />
-      </label>
-
-      {isAdding && (
-        <form className="addPanel" onSubmit={addStockItem}>
-          <input name="name" placeholder="食材名称" />
-          <div className="formRow">
-            <input name="quantity" type="number" min="0.1" step="0.1" defaultValue="1" />
-            <input name="unit" placeholder="单位" defaultValue="份" />
-          </div>
-          <select name="storage" defaultValue="fridge">
-            <option value="fridge">冰箱</option>
-            <option value="freezer">冷冻室</option>
-            <option value="pantry">常温柜</option>
-            <option value="seasoning">调料柜</option>
-          </select>
-          <button className="primaryButton" type="submit">加入库存</button>
-        </form>
-      )}
-
-      <div className="ingredientGrid">
-        {stock.map((item) => (
-          <button
-            className={`assetCard ingredientAsset ${selectedIds.includes(item.id) ? "selected" : ""}`}
-            key={item.id}
-            onClick={() => toggleSelected(item.id)}
-            type="button"
-          >
-            <img className="cutoutImage" src={item.image} alt={item.name} />
-            <span className={`freshness ${item.freshness}`}>{freshnessLabels[item.freshness]}</span>
-            <strong>{item.name}</strong>
-            <small>{item.quantity}{item.unit} · {storageLabels[item.storage]}</small>
-            {selectedIds.includes(item.id) && <span className="selectedBadge"><Check size={14} /></span>}
+      <div className="railTags secondary">
+        {secondLevels.map((item) => (
+          <button className={level2 === item.name ? "active" : ""} type="button" key={item.name} onClick={() => chooseLevel2(item.name)}>
+            {item.name}
           </button>
         ))}
       </div>
-
-      <div className="actionDock">
-        <div>
-          <strong>{selectedItems.length} 个食材已选</strong>
-          <small>{selectedItems.map((item) => item.name).join(" / ") || "选择食材后进入厨具"}</small>
-        </div>
-        <button className="ghostButton" onClick={onTools} type="button">选厨具</button>
-        <button className="primaryButton" onClick={onGenerate} type="button"><Wand2 size={16} /> 生成</button>
-      </div>
-    </section>
-  );
-}
-
-function ToolsView({
-  tools,
-  activeToolId,
-  setActiveToolId,
-  selectedItems,
-  onGenerate,
-}: {
-  tools: KitchenTool[];
-  activeToolId: string;
-  setActiveToolId: (id: string) => void;
-  selectedItems: StockItem[];
-  onGenerate: () => void;
-}) {
-  const groups = [
-    { id: "heat", label: "加热" },
-    { id: "steam", label: "蒸煮" },
-    { id: "bake", label: "烘烤" },
-    { id: "drink", label: "饮品" },
-    { id: "prep", label: "处理" },
-  ];
-  return (
-    <section>
-      <div className="sectionHeader">
-        <div>
-          <p className="eyebrow">Kitchen tools</p>
-          <h1 className="pageTitle">选择厨具</h1>
-          <p className="pageSub">按当前食材选择烹饪方式。</p>
-        </div>
-        <button className="primaryButton" onClick={onGenerate} type="button"><Sparkles size={16} /> 生成食谱</button>
-      </div>
-
-      <div className="selectedRail">
-        {selectedItems.map((item) => (
-          <div className="tinyCutout" key={item.id}>
-            <img src={item.image} alt={item.name} />
-            <span>{item.name}</span>
-          </div>
+      <div className="foodChoiceGrid">
+        {visibleFoods.map((food) => (
+          <button className={selectedFood.id === food.id ? "selected" : ""} type="button" key={food.id} onClick={() => selectFood(food.id)}>
+            <FoodImage src={food.photo} alt={food.name} />
+            <strong>{food.level3}</strong>
+            <small>{food.storageTags.join(" / ")}</small>
+          </button>
         ))}
       </div>
-
-      {groups.map((group) => {
-        const groupTools = tools.filter((tool) => tool.group === group.id);
-        if (!groupTools.length) return null;
-        return (
-          <div className="toolGroup" key={group.id}>
-            <h2>{group.label}</h2>
-            <div className="toolGrid">
-              {groupTools.map((tool) => (
-                <button
-                  className={`assetCard toolCard ${activeToolId === tool.id ? "selected" : ""}`}
-                  key={tool.id}
-                  onClick={() => setActiveToolId(tool.id)}
-                  type="button"
-                >
-                  <img className="cutoutImage toolImage" src={tool.image} alt={tool.name} />
-                  <strong>{tool.name}</strong>
-                  <small>{tool.subtitle}</small>
-                </button>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-    </section>
-  );
-}
-
-function RecipesView(props: {
-  recipes: RecipeIdea[];
-  featuredRecipe: RecipeIdea | null;
-  favoriteIds: Set<string>;
-  openTutorialId: string | null;
-  setOpenTutorialId: (id: string | null) => void;
-  toggleFavorite: (recipe: RecipeIdea) => void;
-  cookRecipe: (recipe: RecipeIdea) => void;
-  addWantedRecipe: (recipe: RecipeIdea, source: string) => void;
-  onBack: () => void;
-}) {
-  const { recipes, featuredRecipe, onBack } = props;
-  return (
-    <section>
-      <button className="textButton" onClick={onBack} type="button"><ChevronLeft size={18} /> 返回厨具</button>
-      <div className="sectionHeader">
-        <div>
-          <p className="eyebrow">Recipe surprise</p>
-          <h1 className="pageTitle">推荐食谱</h1>
-          <p className="pageSub">今日最合适的一道菜已优先弹出。</p>
-        </div>
-      </div>
-      {featuredRecipe && (
-        <div className="surpriseDish">
-          <img src={featuredRecipe.image} alt={featuredRecipe.title} />
-          <div>
-            <span>Best match</span>
-            <h2>{featuredRecipe.title}</h2>
-            <p>{featuredRecipe.why}</p>
-          </div>
-        </div>
-      )}
-      <RecipeCards {...props} recipes={recipes} />
-    </section>
-  );
-}
-
-function RecipeCollection(props: {
-  title: string;
-  empty: string;
-  recipes: RecipeIdea[];
-  favoriteIds: Set<string>;
-  openTutorialId: string | null;
-  setOpenTutorialId: (id: string | null) => void;
-  toggleFavorite: (recipe: RecipeIdea) => void;
-  cookRecipe: (recipe: RecipeIdea) => void;
-  addWantedRecipe: (recipe: RecipeIdea, source: string) => void;
-}) {
-  return (
-    <section>
-      <div className="sectionHeader">
-        <div>
-          <p className="eyebrow">Saved recipes</p>
-          <h1 className="pageTitle">{props.title}</h1>
-          <p className="pageSub">{props.empty}</p>
-        </div>
-      </div>
-      <RecipeCards {...props} />
-    </section>
-  );
-}
-
-function RecipeCards({
-  recipes,
-  favoriteIds,
-  openTutorialId,
-  setOpenTutorialId,
-  toggleFavorite,
-  cookRecipe,
-  addWantedRecipe,
-}: {
-  recipes: RecipeIdea[];
-  favoriteIds: Set<string>;
-  openTutorialId: string | null;
-  setOpenTutorialId: (id: string | null) => void;
-  toggleFavorite: (recipe: RecipeIdea) => void;
-  cookRecipe: (recipe: RecipeIdea) => void;
-  addWantedRecipe: (recipe: RecipeIdea, source: string) => void;
-}) {
-  if (!recipes.length) {
-    return <div className="emptyState"><Bookmark size={34} /><p>暂无菜谱</p></div>;
-  }
-  return (
-    <div className="recipeGrid">
-      {recipes.map((recipe) => {
-        const isOpen = openTutorialId === recipe.id;
-        const isFav = favoriteIds.has(recipe.id);
-        return (
-          <article className={`recipeFlip ${isOpen ? "open" : ""}`} key={recipe.id}>
-            <div className="recipeFace recipeFront">
-              <button className="favoriteButton" onClick={() => toggleFavorite(recipe)} type="button" aria-label="收藏菜谱">
-                {isFav ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
-              </button>
-              <img className="dishCutout" src={recipe.image} alt={recipe.title} />
-              <div className="tagRow">
-                <span><Timer size={13} /> {recipe.time} 分钟</span>
-                <span>{recipe.difficulty}</span>
-                <span>{recipe.cuisine}</span>
-                <span>{recipe.origin}</span>
-                <span>{recipe.calories} kcal</span>
-              </div>
-              <h2>{recipe.title}</h2>
-              <p>{recipe.why}</p>
-              <div className="needLine">需要：{recipe.used.map((item) => item.label).join("、") || "当前库存"}</div>
-              <div className="cardActions">
-                <button className="ghostButton" onClick={() => addWantedRecipe(recipe, "wanted")} type="button">
-                  <ClipboardList size={16} /> 想做
-                </button>
-                <button className="primaryButton" onClick={() => setOpenTutorialId(recipe.id)} type="button">
-                  <ChefHat size={16} /> 制作
-                </button>
-              </div>
-            </div>
-            <div className="recipeFace recipeBack">
-              <button className="textButton" onClick={() => setOpenTutorialId(null)} type="button"><ChevronLeft size={18} /> 返回卡片</button>
-              <h2>{recipe.title}</h2>
-              <ol>
-                {recipe.steps.map((step) => <li key={step}>{step}</li>)}
-              </ol>
-              <div className="cookInteractions">
-                <div><Camera size={18} /><span>成品照 AI 打分</span></div>
-                <div><BadgeCheck size={18} /><span>生成制作贴图</span></div>
-              </div>
-              <button className="cookButton" onClick={() => cookRecipe(recipe)} type="button">
-                <Check size={17} /> 完成制作并记录
-              </button>
-            </div>
-          </article>
-        );
-      })}
     </div>
   );
 }
 
-function CookedView({
-  records,
-  addWantedRecipe,
+function FoodEditor({
+  selectedFood,
+  amountMode,
+  setAmountMode,
+  amount,
+  setAmount,
+  price,
+  setPrice,
+  note,
+  setNote,
 }: {
-  records: CookRecord[];
-  addWantedRecipe: (recipe: RecipeIdea, source: string) => void;
+  selectedFood: FoodInfo;
+  amountMode: AmountMode;
+  setAmountMode: (mode: AmountMode) => void;
+  amount: number;
+  setAmount: (value: number) => void;
+  price: number;
+  setPrice: (value: number) => void;
+  note: string;
+  setNote: (value: string) => void;
 }) {
+  const maxAmount = amountMode === "count" ? 12 : 1200;
   return (
-    <section>
-      <div className="sectionHeader">
-        <div>
-          <p className="eyebrow">My cookbook</p>
-          <h1 className="pageTitle">我的菜谱</h1>
-          <p className="pageSub">做过的菜会沉淀成你的私人菜谱。</p>
+    <div className="foodEditor">
+      <div className="editorLine">
+        <Snowflake size={17} />
+        <span>推荐储存</span>
+        <strong>{storageText(selectedFood.storage)}</strong>
+        <small>{selectedFood.shelfLifeDays} 天建议期</small>
+      </div>
+      <div className="editorLine">
+        <Scale size={17} />
+        <span>记录方式</span>
+        <div className="segmented">
+          <button className={amountMode === "count" ? "active" : ""} type="button" onClick={() => setAmountMode("count")}>数量</button>
+          <button className={amountMode === "weight" ? "active" : ""} type="button" onClick={() => setAmountMode("weight")}>克重</button>
         </div>
       </div>
-      {!records.length ? (
-        <div className="emptyState"><ChefHat size={34} /><p>完成制作后会生成记录。</p></div>
-      ) : (
-        <div className="cookedList">
-          {records.map((record) => (
-            <article className="cookedCard" key={record.id}>
-              <img src={record.recipe.image} alt={record.recipe.title} />
-              <div>
-                <h2>{record.recipe.title}</h2>
-                <p>{record.photoNote}</p>
-                <span><Star size={14} /> AI 评分 {record.rating}</span>
-              </div>
-              <button className="ghostButton" onClick={() => addWantedRecipe(record.recipe, "cooked")} type="button">
-                复做清单
-              </button>
-            </article>
+      <label className="rangeLine">
+        <span>{amountMode === "count" ? "数量" : "克重"}：{amount}{amountMode === "count" ? selectedFood.unit : "g"}</span>
+        <input type="range" min={amountMode === "count" ? 1 : 50} max={maxAmount} step={amountMode === "count" ? 1 : 50} value={amount} onChange={(event) => setAmount(Number(event.target.value))} />
+      </label>
+      <label className="inputLine">
+        <CircleDollarSign size={17} />
+        <span>价格</span>
+        <input type="number" min="0" step="0.1" value={price} onChange={(event) => setPrice(Number(event.target.value))} />
+      </label>
+      <label className="inputLine">
+        <Tags size={17} />
+        <span>备注/标签</span>
+        <input value={note} onChange={(event) => setNote(event.target.value)} />
+      </label>
+    </div>
+  );
+}
+
+function WarehouseView({
+  inventory,
+  fridgeOpen,
+  setFridgeOpen,
+  activeToolId,
+  setActiveToolId,
+  selectedTool,
+  shoppingList,
+  planToday,
+}: {
+  inventory: InventoryItem[];
+  fridgeOpen: boolean;
+  setFridgeOpen: (value: boolean) => void;
+  activeToolId: string;
+  setActiveToolId: (id: string) => void;
+  selectedTool: KitchenTool;
+  shoppingList: ShoppingLine[];
+  planToday: (recipe: Recipe, source: string) => void;
+}) {
+  const bestRecipe = recipesSeed.find((recipe) => recipe.toolId === activeToolId) ?? recipesSeed[0];
+  return (
+    <section className="warehouseStack">
+      <div className="sectionHeader">
+        <div>
+          <p className="eyebrow">Fridge and pantry</p>
+          <h1>仓库</h1>
+          <p className="pageSub">冰箱、冷冻、室温和调料分区管理。点击冰箱门查看内部摆放。</p>
+        </div>
+        <button className="primaryButton" type="button" onClick={() => planToday(bestRecipe, "仓库生成食谱")}>
+          <Sparkles size={16} /> 今天吃什么
+        </button>
+      </div>
+      <FridgeScene inventory={inventory} open={fridgeOpen} onToggle={() => setFridgeOpen(!fridgeOpen)} />
+      <ToolCarousel activeToolId={activeToolId} setActiveToolId={setActiveToolId} />
+      <div className="todayPanel">
+        <div>
+          <p className="eyebrow">Best with {selectedTool.name}</p>
+          <h2>{bestRecipe.title}</h2>
+          <p>{bestRecipe.reason}</p>
+        </div>
+        <RecipeMeta recipe={bestRecipe} />
+      </div>
+      {shoppingList.length > 0 && (
+        <div className="shoppingOutput">
+          <h2>购物清单输出</h2>
+          {shoppingList.map((line) => (
+            <div key={line.id}><ShoppingBag size={16} /> {line.name}<small>{line.reason}</small></div>
           ))}
         </div>
       )}
@@ -1079,66 +947,246 @@ function CookedView({
   );
 }
 
-function ShoppingView({
-  shopping,
-  setShopping,
+function FridgeScene({ inventory, open, onToggle }: { inventory: InventoryItem[]; open: boolean; onToggle: () => void }) {
+  return (
+    <button className={`fridgeScene ${open ? "open" : ""}`} type="button" onClick={onToggle} aria-label="打开或关闭冰箱">
+      <div className="fridgeCabinet">
+        <div className="fridgeInterior">
+          <Shelf title="冷藏区" items={inventory.filter((item) => item.storage === "fridge").slice(0, 5)} />
+          <Shelf title="冷冻区" items={inventory.filter((item) => item.storage === "freezer").slice(0, 4)} />
+          <Shelf title="室温 / 调料" items={inventory.filter((item) => item.storage === "room" || item.storage === "seasoning").slice(0, 5)} />
+        </div>
+        <div className="fridgeDoor">
+          <span className="handle vertical" />
+          <span className="handle horizontal top" />
+          <span className="handle horizontal bottom" />
+          <span className="magnet one">M</span>
+          <span className="magnet two">菜</span>
+          <span className="magnet three">旅</span>
+        </div>
+      </div>
+      <span className="fridgeHint">{open ? "点击关上冰箱" : "点击打开冰箱"}</span>
+    </button>
+  );
+}
+
+function Shelf({ title, items }: { title: string; items: InventoryItem[] }) {
+  return (
+    <div className="shelf">
+      <span>{title}</span>
+      <div className="shelfItems">
+        {items.map((item) => (
+          <div className="fridgeFood" key={item.inventoryId}>
+            <FoodImage src={item.photo} alt={item.name} />
+            <small>{item.name}</small>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ToolCarousel({ activeToolId, setActiveToolId }: { activeToolId: string; setActiveToolId: (id: string) => void }) {
+  return (
+    <div className="toolCarousel">
+      <div className="sectionHeader compactHeader">
+        <div>
+          <p className="eyebrow">Retro tools</p>
+          <h2>选择厨具</h2>
+        </div>
+      </div>
+      <div className="toolRail">
+        {kitchenTools.map((tool) => (
+          <button className={activeToolId === tool.id ? "active" : ""} type="button" key={tool.id} onClick={() => setActiveToolId(tool.id)} style={{ "--tool": tool.tone } as React.CSSProperties}>
+            <img src={tool.image} alt={tool.name} onError={(event) => { event.currentTarget.src = fallbackImage; }} />
+            <strong>{tool.name}</strong>
+            <small>{tool.subtitle}</small>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RecipesView({
+  recipes,
+  recipeFilter,
+  setRecipeFilter,
+  cuisineFilter,
+  setCuisineFilter,
+  cuisineOptions,
+  favorites,
+  cookedIds,
+  toggleFavorite,
+  planToday,
 }: {
-  shopping: ShoppingItem[];
-  setShopping: React.Dispatch<React.SetStateAction<ShoppingItem[]>>;
+  recipes: Recipe[];
+  recipeFilter: RecipeFilter;
+  setRecipeFilter: (value: RecipeFilter) => void;
+  cuisineFilter: string;
+  setCuisineFilter: (value: string) => void;
+  cuisineOptions: string[];
+  favorites: string[];
+  cookedIds: string[];
+  toggleFavorite: (recipeId: string) => void;
+  planToday: (recipe: Recipe, source: string) => void;
 }) {
   return (
     <section>
       <div className="sectionHeader">
         <div>
-          <p className="eyebrow">From wanted recipes</p>
-          <h1 className="pageTitle">购物清单</h1>
-          <p className="pageSub">由想做菜谱自动汇总。</p>
+          <p className="eyebrow">Recipe library</p>
+          <h1>菜谱</h1>
+          <p className="pageSub">收藏、做过和全部菜谱分层筛选；后续继续打磨更多口味条件。</p>
         </div>
       </div>
-      {!shopping.length ? (
-        <div className="emptyState"><ShoppingBasket size={34} /><p>先在菜谱卡片点击“想做”。</p></div>
-      ) : (
-        <div className="shoppingList">
-          {shopping.map((item) => (
-            <label className={`shoppingItem ${item.checked ? "done" : ""}`} key={item.id}>
-              <input
-                type="checkbox"
-                checked={item.checked}
-                onChange={() =>
-                  setShopping((current) =>
-                    current.map((entry) => entry.id === item.id ? { ...entry, checked: !entry.checked } : entry),
-                  )
-                }
-              />
-              <span><strong>{item.name}</strong><small>{item.reason}</small></span>
-              <button type="button" onClick={() => setShopping((current) => current.filter((entry) => entry.id !== item.id))}>
-                <Trash2 size={16} />
-              </button>
-            </label>
+      <div className="filterBlock">
+        <div className="railTags">
+          {[
+            ["all", "全部"],
+            ["favorite", "收藏的菜"],
+            ["cooked", "做过的菜"],
+          ].map(([id, label]) => (
+            <button className={recipeFilter === id ? "active" : ""} type="button" key={id} onClick={() => setRecipeFilter(id as RecipeFilter)}>
+              {label}
+            </button>
           ))}
         </div>
-      )}
+        <div className="railTags secondary">
+          {cuisineOptions.map((item) => (
+            <button className={cuisineFilter === item ? "active" : ""} type="button" key={item} onClick={() => setCuisineFilter(item)}>
+              {item}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="recipeGrid">
+        {recipes.map((recipe) => (
+          <article className="recipeCard" key={recipe.id}>
+            <button className="favoriteButton" type="button" onClick={() => toggleFavorite(recipe.id)} aria-label="收藏菜谱">
+              {favorites.includes(recipe.id) ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
+            </button>
+            <img src={recipe.image} alt={recipe.title} onError={(event) => { event.currentTarget.src = fallbackImage; }} />
+            <h2>{recipe.title}</h2>
+            <RecipeMeta recipe={recipe} />
+            <p>{recipe.reason}</p>
+            <div className="needLine"><Utensils size={15} /> 需要：{recipe.required.join("、")}</div>
+            <div className="cardActions">
+              <span>{cookedIds.includes(recipe.id) ? "做过" : "未做"}</span>
+              <button className="primaryButton" type="button" onClick={() => planToday(recipe, "菜谱选择")}>
+                今天吃什么
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
     </section>
   );
 }
 
-function NavButton({
-  icon,
-  label,
-  active,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
+function DiaryView({ diary, shoppingList }: { diary: DiaryEntry[]; shoppingList: ShoppingLine[] }) {
+  const preference = diary.length > 2 ? "偏好快手家常与低洗碗路径" : "偏好信号正在积累";
+  return (
+    <section>
+      <div className="sectionHeader">
+        <div>
+          <p className="eyebrow">Cooking diary</p>
+          <h1>日记</h1>
+          <p className="pageSub">记录做菜行为，沉淀偏好。这里是后续个性化推荐的伏笔。</p>
+        </div>
+      </div>
+      <div className="diaryInsight">
+        <Heart size={20} />
+        <div>
+          <strong>{preference}</strong>
+          <p>收藏、今天吃什么、做过的菜会逐步形成你的口味画像。</p>
+        </div>
+      </div>
+      {shoppingList.length > 0 && (
+        <div className="shoppingOutput diaryShopping">
+          <h2>本次购物清单</h2>
+          {shoppingList.map((line) => (
+            <div key={line.id}><ShoppingBag size={16} /> {line.name}<small>{line.reason}</small></div>
+          ))}
+        </div>
+      )}
+      <div className="diaryList">
+        {diary.map((entry) => (
+          <article key={entry.id}>
+            <span><PenLine size={15} /> {entry.date}</span>
+            <h2>{entry.recipeTitle}</h2>
+            <p>{entry.note}</p>
+            <div>{entry.tags.map((tag) => <small key={tag}>{tag}</small>)}</div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RecipeMeta({ recipe }: { recipe: Recipe }) {
+  return (
+    <div className="recipeMeta">
+      <span><ClipboardList size={13} /> {recipe.required.length} 种食材</span>
+      <span><Timer size={13} /> {recipe.minutes} 分钟</span>
+      <span>{recipe.difficulty}</span>
+      <span>{recipe.cuisine}</span>
+      <span>{recipe.calories} kcal</span>
+    </div>
+  );
+}
+
+function Metric({ label, value, suffix }: { label: string; value: number; suffix: string }) {
+  return (
+    <div className="metricCard">
+      <span>{label}</span>
+      <strong>{value}<small>{suffix}</small></strong>
+      <div><i style={{ width: `${Math.min(value, 100)}%` }} /></div>
+    </div>
+  );
+}
+
+function NavButton({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
   return (
     <button className={`navButton ${active ? "active" : ""}`} onClick={onClick} type="button">
       {icon}
       <span>{label}</span>
     </button>
   );
+}
+
+function FoodImage({ src, alt }: { src: string; alt: string }) {
+  return <img className="foodPhoto" src={src} alt={alt} onError={(event) => { event.currentTarget.src = fallbackImage; }} />;
+}
+
+function freshnessPercent(item: InventoryItem) {
+  return Math.max(0, Math.min(100, Math.round(((item.shelfLifeDays - item.addedDaysAgo) / item.shelfLifeDays) * 100)));
+}
+
+function freshnessLevel(item: InventoryItem): Freshness {
+  const score = freshnessPercent(item);
+  if (score >= 75) return "fresh";
+  if (score >= 45) return "good";
+  if (score >= 18) return "soon";
+  return "danger";
+}
+
+function storageText(storage: StorageZone) {
+  return {
+    fridge: "冷藏",
+    freezer: "冷冻",
+    room: "室温保存",
+    seasoning: "避光防潮",
+  }[storage];
+}
+
+function methodText(method: UploadMethod) {
+  return {
+    photo: "照片识别会优先提取可见食材和包装信息",
+    online: "线上截图会读取商品名、规格和价格",
+    receipt: "小票会解析购买日期、商品和总价",
+    manual: "手动输入会根据食材库自动补全默认值",
+  }[method];
 }
 
 export default App;
