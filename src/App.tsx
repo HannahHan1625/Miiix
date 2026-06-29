@@ -23,7 +23,6 @@ import {
   PackageCheck,
   PenLine,
   ReceiptText,
-  Refrigerator,
   Scale,
   ShoppingBag,
   SlidersHorizontal,
@@ -38,8 +37,8 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-const PRODUCT_VERSION = "v0.2.0";
-const VERSION_NAME = "晨光冰箱";
+const PRODUCT_VERSION = "v0.2.1";
+const VERSION_NAME = "掌心仓库";
 
 type View = "home" | "warehouse" | "recipes" | "diary";
 type UploadMethod = "photo" | "online" | "receipt" | "manual";
@@ -374,7 +373,6 @@ function App() {
   const [amount, setAmount] = useState(500);
   const [price, setPrice] = useState(18.9);
   const [note, setNote] = useState("冷冻分装");
-  const [fridgeOpen, setFridgeOpen] = useState(false);
   const [activeToolId, setActiveToolId] = useState("wok");
   const [favorites, setFavorites] = useState<string[]>(["eggplant-pork-rice"]);
   const [cookedIds, setCookedIds] = useState<string[]>(["pepper-egg"]);
@@ -450,7 +448,6 @@ function App() {
       setUploadOpen(false);
       setUploadDone(false);
       setView("warehouse");
-      setFridgeOpen(true);
     }, 560);
   }
 
@@ -533,16 +530,12 @@ function App() {
               stats={stats}
               inventory={inventory}
               openUpload={openUpload}
-              fridgeOpen={fridgeOpen}
-              setFridgeOpen={setFridgeOpen}
               setView={setView}
             />
           )}
           {view === "warehouse" && (
             <WarehouseView
               inventory={inventory}
-              fridgeOpen={fridgeOpen}
-              setFridgeOpen={setFridgeOpen}
               activeToolId={activeToolId}
               setActiveToolId={setActiveToolId}
               selectedTool={selectedTool}
@@ -569,7 +562,7 @@ function App() {
 
         <nav className="bottomNav" aria-label="主导航">
           <NavButton icon={<Home size={19} />} label="主页" active={view === "home"} onClick={() => setView("home")} />
-          <NavButton icon={<Refrigerator size={19} />} label="仓库" active={view === "warehouse"} onClick={() => setView("warehouse")} />
+          <NavButton icon={<PackageCheck size={19} />} label="仓库" active={view === "warehouse"} onClick={() => setView("warehouse")} />
           <NavButton icon={<BookOpen size={19} />} label="菜谱" active={view === "recipes"} onClick={() => setView("recipes")} />
           <NavButton icon={<NotebookPen size={19} />} label="日记" active={view === "diary"} onClick={() => setView("diary")} />
         </nav>
@@ -607,8 +600,6 @@ function HomeView({
   stats,
   inventory,
   openUpload,
-  fridgeOpen,
-  setFridgeOpen,
   setView,
 }: {
   stats: ReturnType<typeof useMemo> extends never ? never : {
@@ -621,8 +612,6 @@ function HomeView({
   };
   inventory: InventoryItem[];
   openUpload: () => void;
-  fridgeOpen: boolean;
-  setFridgeOpen: (value: boolean) => void;
   setView: (view: View) => void;
 }) {
   return (
@@ -655,12 +644,12 @@ function HomeView({
       <div className="homeWarehouse">
         <div className="sectionHeader compactHeader">
           <div>
-            <p className="eyebrow">Warehouse view</p>
-            <h2>打开冰箱看看</h2>
+            <p className="eyebrow">Pocket warehouse</p>
+            <h2>最近食材</h2>
           </div>
           <button className="ghostButton" type="button" onClick={() => setView("warehouse")}>进入仓库</button>
         </div>
-        <FridgeScene inventory={inventory} open={fridgeOpen} onToggle={() => setFridgeOpen(!fridgeOpen)} />
+        <IngredientPreview inventory={inventory} />
       </div>
     </section>
   );
@@ -895,8 +884,6 @@ function FoodEditor({
 
 function WarehouseView({
   inventory,
-  fridgeOpen,
-  setFridgeOpen,
   activeToolId,
   setActiveToolId,
   selectedTool,
@@ -904,8 +891,6 @@ function WarehouseView({
   planToday,
 }: {
   inventory: InventoryItem[];
-  fridgeOpen: boolean;
-  setFridgeOpen: (value: boolean) => void;
   activeToolId: string;
   setActiveToolId: (id: string) => void;
   selectedTool: KitchenTool;
@@ -917,15 +902,15 @@ function WarehouseView({
     <section className="warehouseStack">
       <div className="sectionHeader">
         <div>
-          <p className="eyebrow">Fridge and pantry</p>
+          <p className="eyebrow">Ingredients first</p>
           <h1>仓库</h1>
-          <p className="pageSub">冰箱、冷冻、室温和调料分区管理。点击冰箱门查看内部摆放。</p>
+          <p className="pageSub">直接展示食材、保存方式、新鲜度、数量和价格，移动端优先看得见、点得快。</p>
         </div>
         <button className="primaryButton" type="button" onClick={() => planToday(bestRecipe, "仓库生成食谱")}>
           <Sparkles size={16} /> 今天吃什么
         </button>
       </div>
-      <FridgeScene inventory={inventory} open={fridgeOpen} onToggle={() => setFridgeOpen(!fridgeOpen)} />
+      <IngredientWarehouse inventory={inventory} />
       <ToolCarousel activeToolId={activeToolId} setActiveToolId={setActiveToolId} />
       <div className="todayPanel">
         <div>
@@ -947,42 +932,97 @@ function WarehouseView({
   );
 }
 
-function FridgeScene({ inventory, open, onToggle }: { inventory: InventoryItem[]; open: boolean; onToggle: () => void }) {
+const storageSections: Array<{ id: StorageZone; label: string; desc: string; icon: React.ReactNode }> = [
+  { id: "fridge", label: "冷藏", desc: "短期新鲜，优先安排", icon: <Snowflake size={15} /> },
+  { id: "freezer", label: "冷冻", desc: "分装保存，适合备菜", icon: <PackageCheck size={15} /> },
+  { id: "room", label: "室温", desc: "避光通风，随手可取", icon: <Home size={15} /> },
+  { id: "seasoning", label: "调料", desc: "做菜风味底座", icon: <Tags size={15} /> },
+];
+
+function IngredientPreview({ inventory }: { inventory: InventoryItem[] }) {
   return (
-    <button className={`fridgeScene ${open ? "open" : ""}`} type="button" onClick={onToggle} aria-label="打开或关闭冰箱">
-      <div className="fridgeCabinet">
-        <div className="fridgeInterior">
-          <Shelf title="冷藏区" items={inventory.filter((item) => item.storage === "fridge").slice(0, 5)} />
-          <Shelf title="冷冻区" items={inventory.filter((item) => item.storage === "freezer").slice(0, 4)} />
-          <Shelf title="室温 / 调料" items={inventory.filter((item) => item.storage === "room" || item.storage === "seasoning").slice(0, 5)} />
-        </div>
-        <div className="fridgeDoor">
-          <span className="handle vertical" />
-          <span className="handle horizontal top" />
-          <span className="handle horizontal bottom" />
-          <span className="magnet one">M</span>
-          <span className="magnet two">菜</span>
-          <span className="magnet three">旅</span>
-        </div>
-      </div>
-      <span className="fridgeHint">{open ? "点击关上冰箱" : "点击打开冰箱"}</span>
-    </button>
+    <div className="ingredientPreviewGrid">
+      {inventory.slice(0, 6).map((item) => (
+        <article className="ingredientMiniCard" key={item.inventoryId}>
+          <FoodImage src={item.photo} alt={item.name} />
+          <div>
+            <strong>{item.name}</strong>
+            <span>{storageText(item.storage)} · {freshnessCopy(item)}</span>
+          </div>
+        </article>
+      ))}
+    </div>
   );
 }
 
-function Shelf({ title, items }: { title: string; items: InventoryItem[] }) {
+function IngredientWarehouse({ inventory }: { inventory: InventoryItem[] }) {
+  const totalPrice = inventory.reduce((sum, item) => sum + item.pricePaid, 0);
+  const urgentCount = inventory.filter((item) => freshnessLevel(item) === "soon" || freshnessLevel(item) === "danger").length;
+
   return (
-    <div className="shelf">
-      <span>{title}</span>
-      <div className="shelfItems">
-        {items.map((item) => (
-          <div className="fridgeFood" key={item.inventoryId}>
-            <FoodImage src={item.photo} alt={item.name} />
-            <small>{item.name}</small>
-          </div>
-        ))}
+    <div className="ingredientWarehouse">
+      <div className="warehouseSummary">
+        <div>
+          <span>食材总数</span>
+          <strong>{inventory.length}<small>件</small></strong>
+        </div>
+        <div>
+          <span>需优先处理</span>
+          <strong>{urgentCount}<small>件</small></strong>
+        </div>
+        <div>
+          <span>估算库存</span>
+          <strong>{Math.round(totalPrice)}<small>元</small></strong>
+        </div>
       </div>
+
+      {storageSections.map((section) => {
+        const items = inventory.filter((item) => item.storage === section.id);
+        if (items.length === 0) return null;
+
+        return (
+          <section className="ingredientZone" key={section.id}>
+            <div className="zoneHeader">
+              <div>
+                <h2>{section.icon}{section.label}</h2>
+                <p>{section.desc}</p>
+              </div>
+              <span>{items.length} 件</span>
+            </div>
+            <div className="ingredientDirectGrid">
+              {items.map((item) => (
+                <IngredientCard item={item} key={item.inventoryId} />
+              ))}
+            </div>
+          </section>
+        );
+      })}
     </div>
+  );
+}
+
+function IngredientCard({ item }: { item: InventoryItem }) {
+  return (
+    <article className={`ingredientCard ${freshnessLevel(item)}`}>
+      <div className="ingredientPhotoWrap">
+        <FoodImage src={item.photo} alt={item.name} />
+      </div>
+      <div className="ingredientBody">
+        <div className="ingredientTitle">
+          <strong>{item.name}</strong>
+          <span className="freshChip">{freshnessCopy(item)}</span>
+        </div>
+        <div className="ingredientMeta">
+          <span>{amountText(item)}</span>
+          <span>{storageText(item.storage)}</span>
+          <span>{item.pricePaid.toFixed(1)} 元</span>
+        </div>
+        <div className="storageTags">
+          {item.storageTags.slice(0, 2).map((tag) => <span key={tag}>{tag}</span>)}
+          {item.note && <span>{item.note}</span>}
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -1169,6 +1209,22 @@ function freshnessLevel(item: InventoryItem): Freshness {
   if (score >= 45) return "good";
   if (score >= 18) return "soon";
   return "danger";
+}
+
+function freshnessCopy(item: InventoryItem) {
+  const percent = freshnessPercent(item);
+  const label = {
+    fresh: "新鲜",
+    good: "稳定",
+    soon: "尽快吃",
+    danger: "马上处理",
+  }[freshnessLevel(item)];
+  return `${label} ${percent}%`;
+}
+
+function amountText(item: InventoryItem) {
+  if (item.amountMode === "count") return `${item.amount}${item.unit}`;
+  return `${item.amount}g`;
 }
 
 function storageText(storage: StorageZone) {

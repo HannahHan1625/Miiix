@@ -372,154 +372,6 @@ h2 {
   color: var(--ink);
 }
 
-.fridgeScene {
-  position: relative;
-  width: min(100%, 760px);
-  min-height: 420px;
-  margin: 0 auto;
-  border: 0;
-  background: transparent;
-  color: var(--ink);
-  display: grid;
-  justify-items: center;
-}
-
-.fridgeCabinet {
-  position: relative;
-  width: min(100%, 360px);
-  height: 390px;
-  perspective: 1200px;
-}
-
-.fridgeInterior,
-.fridgeDoor {
-  position: absolute;
-  inset: 0;
-  border-radius: 8px;
-  border: 1px solid rgba(39, 49, 58, 0.22);
-}
-
-.fridgeInterior {
-  background:
-    linear-gradient(90deg, rgba(185, 217, 234, 0.3), transparent 24%, transparent 76%, rgba(185, 217, 234, 0.26)),
-    #fbfdff;
-  padding: 26px 20px 20px 46px;
-  display: grid;
-  grid-template-rows: 1fr 1fr 1fr;
-  gap: 12px;
-  overflow: hidden;
-}
-
-.fridgeDoor {
-  transform-origin: left center;
-  transition: transform 660ms cubic-bezier(0.18, 0.88, 0.25, 1), box-shadow 660ms ease;
-  background:
-    linear-gradient(105deg, rgba(255, 255, 255, 0.82), rgba(238, 242, 242, 0.92)),
-    url("/assets/fridge-white-reference.png");
-  background-size: cover;
-  background-position: 46% 50%;
-  box-shadow: inset -28px 0 50px rgba(95, 102, 107, 0.1);
-}
-
-.fridgeScene.open .fridgeDoor {
-  transform: rotateY(-76deg);
-  box-shadow: 22px 18px 32px rgba(68, 73, 75, 0.16);
-}
-
-.handle {
-  position: absolute;
-  display: block;
-  background: linear-gradient(90deg, #d8d5ca, #7d817f, #f1eee5);
-  border: 1px solid rgba(39, 49, 58, 0.22);
-  box-shadow: 4px 8px 10px rgba(39, 49, 58, 0.14);
-}
-
-.handle.vertical {
-  left: 32px;
-  top: 42px;
-  width: 10px;
-  height: 154px;
-  border-radius: 999px;
-}
-
-.handle.horizontal {
-  left: 74px;
-  width: 214px;
-  height: 8px;
-  border-radius: 999px;
-}
-
-.handle.top {
-  top: 222px;
-}
-
-.handle.bottom {
-  bottom: 58px;
-}
-
-.magnet {
-  position: absolute;
-  min-width: 30px;
-  height: 24px;
-  border: 1px solid rgba(39, 49, 58, 0.18);
-  border-radius: 8px;
-  background: var(--yellow);
-  display: grid;
-  place-items: center;
-  font-size: 12px;
-  font-weight: 900;
-  transform: rotate(-8deg);
-}
-
-.magnet.one { left: 178px; top: 66px; background: #b9d9ea; }
-.magnet.two { left: 226px; top: 104px; background: #f2c9bd; transform: rotate(7deg); }
-.magnet.three { left: 140px; top: 128px; background: #cddfba; transform: rotate(-14deg); }
-
-.shelf {
-  border-bottom: 2px solid rgba(111, 159, 186, 0.34);
-  display: grid;
-  align-content: end;
-  gap: 5px;
-}
-
-.shelf > span {
-  color: var(--blue-deep);
-  font-size: 12px;
-  font-weight: 850;
-}
-
-.shelfItems {
-  min-height: 76px;
-  display: flex;
-  align-items: end;
-  gap: 10px;
-}
-
-.fridgeFood {
-  width: 54px;
-  display: grid;
-  justify-items: center;
-  gap: 2px;
-}
-
-.fridgeFood .foodPhoto {
-  width: 52px;
-  height: 44px;
-}
-
-.fridgeFood small {
-  font-size: 10px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.fridgeHint {
-  margin-top: 8px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
-}
-
 .foodPhoto {
   width: 98px;
   height: 88px;
@@ -1128,15 +980,6 @@ input[type="range"] {
     font-size: 12px;
   }
 
-  .fridgeCabinet {
-    width: 310px;
-    height: 360px;
-  }
-
-  .handle.horizontal {
-    width: 176px;
-  }
-
   .editorLine,
   .inputLine {
     grid-template-columns: auto 74px 1fr;
@@ -1144,5 +987,477 @@ input[type="range"] {
 
   .editorLine small {
     grid-column: 2 / -1;
+  }
+}
+
+/* v0.2.1: mobile product shell, not a wide desktop page. */
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  min-width: 0;
+  background: var(--cream);
+}
+
+.appShell {
+  width: 100%;
+  min-height: 100dvh;
+  padding: 0;
+  align-items: stretch;
+}
+
+.appFrame {
+  width: 100%;
+  max-width: 430px;
+  height: 100dvh;
+  min-height: 100dvh;
+  margin: 0 auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  grid-template-rows: 64px minmax(0, 1fr) 74px;
+}
+
+.topbar {
+  padding: max(12px, env(safe-area-inset-top)) 16px 10px;
+}
+
+.brandMark {
+  width: 36px;
+  height: 36px;
+}
+
+.brandButton strong {
+  font-size: 18px;
+}
+
+.versionPill {
+  display: none;
+}
+
+.screen {
+  padding: 18px 14px calc(98px + env(safe-area-inset-bottom));
+}
+
+.bottomNav {
+  padding: 7px 8px calc(7px + env(safe-area-inset-bottom));
+  gap: 5px;
+}
+
+.navButton {
+  min-width: 0;
+  min-height: 56px;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1;
+}
+
+h1 {
+  font-size: 30px;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+h2 {
+  font-size: 20px;
+  letter-spacing: 0;
+}
+
+.sectionHeader {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.sectionHeader .primaryButton,
+.sectionHeader .ghostButton {
+  width: 100%;
+}
+
+.profilePanel {
+  grid-template-columns: 1fr;
+  padding: 18px;
+}
+
+.profilePanel p {
+  max-width: none;
+}
+
+.scoreOrb {
+  min-height: 92px;
+}
+
+.scoreOrb strong {
+  font-size: 38px;
+}
+
+.metricGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metricCard {
+  min-width: 0;
+  padding: 12px;
+}
+
+.metricCard strong {
+  font-size: 22px;
+}
+
+.uploadEntry {
+  min-height: 82px;
+  padding: 16px;
+}
+
+.uploadEntry span {
+  font-size: 20px;
+}
+
+.homeWarehouse,
+.toolCarousel,
+.todayPanel,
+.shoppingOutput,
+.diaryInsight,
+.diaryList article,
+.filterBlock {
+  padding: 14px;
+}
+
+.ingredientPreviewGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ingredientMiniCard {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+}
+
+.ingredientMiniCard .foodPhoto {
+  width: 56px;
+  height: 52px;
+}
+
+.ingredientMiniCard strong,
+.ingredientMiniCard span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ingredientMiniCard span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.ingredientWarehouse {
+  display: grid;
+  gap: 12px;
+}
+
+.warehouseSummary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.warehouseSummary div {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff9dc;
+  padding: 10px;
+}
+
+.warehouseSummary span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.warehouseSummary strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 22px;
+}
+
+.warehouseSummary small {
+  margin-left: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ingredientZone {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 253, 245, 0.82);
+  padding: 12px;
+}
+
+.zoneHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.zoneHeader h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.zoneHeader p {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.zoneHeader > span {
+  flex: 0 0 auto;
+  height: 28px;
+  border-radius: 999px;
+  background: #edf8fc;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 9px;
+  color: var(--blue-deep);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.ingredientDirectGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.ingredientCard {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf5;
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px;
+  align-items: center;
+}
+
+.ingredientCard.soon {
+  background: #fff9dc;
+}
+
+.ingredientCard.danger {
+  border-color: rgba(205, 91, 70, 0.32);
+  background: #fff0ea;
+}
+
+.ingredientPhotoWrap {
+  min-width: 0;
+  height: 76px;
+  display: grid;
+  place-items: center;
+}
+
+.ingredientCard .foodPhoto {
+  width: 74px;
+  height: 68px;
+}
+
+.ingredientBody {
+  min-width: 0;
+}
+
+.ingredientTitle {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ingredientTitle strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.freshChip {
+  flex: 0 0 auto;
+  min-height: 24px;
+  border-radius: 999px;
+  background: #e8f4fa;
+  color: #5a7f93;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.ingredientMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.ingredientMeta span,
+.storageTags span {
+  min-height: 24px;
+  border-radius: 999px;
+  background: rgba(185, 217, 234, 0.28);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.storageTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.storageTags span {
+  background: rgba(246, 223, 143, 0.38);
+}
+
+.foodPhoto {
+  object-fit: cover;
+  border-radius: 46% 54% 44% 56% / 54% 46% 55% 45%;
+  border: 2px solid rgba(255, 253, 245, 0.96);
+  outline: 1px solid rgba(39, 49, 58, 0.12);
+}
+
+.uploadCard {
+  width: 100%;
+  max-width: 430px;
+  max-height: 94dvh;
+}
+
+.uploadCardInner {
+  min-height: min(92dvh, 760px);
+}
+
+.uploadFace {
+  padding: 14px 14px calc(22px + env(safe-area-inset-bottom));
+  border-radius: 18px 18px 0 0;
+}
+
+.methodGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.methodGrid button {
+  min-height: 104px;
+}
+
+.foodChoiceGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.foodChoiceGrid button {
+  min-height: 138px;
+  padding: 6px 2px;
+}
+
+.foodChoiceGrid .foodPhoto {
+  width: 76px;
+  height: 68px;
+}
+
+.editorLine,
+.inputLine {
+  grid-template-columns: auto 72px minmax(0, 1fr);
+}
+
+.editorLine small {
+  grid-column: 2 / -1;
+}
+
+.todayPanel {
+  grid-template-columns: 1fr;
+}
+
+.toolRail button {
+  flex-basis: 148px;
+  min-height: 184px;
+}
+
+.toolRail img {
+  width: 112px;
+  height: 98px;
+}
+
+.recipeGrid {
+  grid-template-columns: 1fr;
+}
+
+.recipeCard > img {
+  height: 146px;
+}
+
+.shoppingOutput div {
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 10px 12px;
+}
+
+.shoppingOutput small {
+  grid-column: 2;
+}
+
+@media (max-width: 360px) {
+  .ingredientPreviewGrid,
+  .metricGrid,
+  .methodGrid,
+  .foodChoiceGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .warehouseSummary {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 560px) {
+  .appShell {
+    padding: 18px 0;
+    align-items: center;
+  }
+
+  .appFrame {
+    height: min(900px, calc(100dvh - 36px));
+    min-height: min(900px, calc(100dvh - 36px));
+    border: 1px solid rgba(69, 82, 92, 0.16);
+    border-radius: 28px;
+    box-shadow: var(--shadow);
   }
 }

@@ -47,3 +47,20 @@ Product judgment:
 
 - This version moves Miiix from a feature demo toward an app-like daily cooking companion.
 - The next quality gate is replacing MVP food photos with a licensed internal cutout asset library.
+
+## v0.2.1 — 掌心仓库
+
+Date: 2026-06-30
+
+Scope:
+
+- Forced the product shell into a mobile-first app width with a 430px max frame, safe-area-aware bottom navigation, and no horizontal overflow at a 390px viewport.
+- Changed the warehouse tab from fridge-style visualization to direct ingredient management: summary metrics, storage zones, ingredient cards, freshness tags, amount, storage method, and price.
+- Kept the home page focused on user identity, data visualization, upload entry, and a compact recent-ingredient preview.
+- Verified the upload sheet at mobile width: four upload methods, category rows, ingredient image picker, editor controls, completion flip, and automatic navigation to Warehouse.
+- Verified Recipes and Diary pages at mobile width with filters, recipe metadata, required ingredients, diary output, and no console errors.
+
+Product judgment:
+
+- v0.2.0 over-indexed on a visual metaphor. v0.2.1 corrects the MVP back to the core job: fast mobile inventory visibility and food decision support.
+- The fridge concept can return later as a home visualization or personalization layer, but the Warehouse tab must remain operational and direct.
