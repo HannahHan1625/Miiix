@@ -4,6 +4,7 @@ import {
   Bookmark,
   BookmarkCheck,
   Camera,
+  CalendarDays,
   Carrot,
   Check,
   ChefHat,
@@ -37,8 +38,8 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-const PRODUCT_VERSION = "v0.2.1";
-const VERSION_NAME = "掌心仓库";
+const PRODUCT_VERSION = "v0.2.2";
+const VERSION_NAME = "滑动仓库账本";
 
 type View = "home" | "warehouse" | "recipes" | "diary";
 type UploadMethod = "photo" | "online" | "receipt" | "manual";
@@ -93,6 +94,7 @@ type DiaryEntry = {
   id: string;
   recipeTitle: string;
   date: string;
+  dateISO: string;
   source: string;
   note: string;
   tags: string[];
@@ -115,6 +117,23 @@ type KitchenTool = {
 
 const fallbackImage =
   "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 180'%3E%3Crect width='240' height='180' fill='%23fff6dc'/%3E%3Ccircle cx='120' cy='90' r='46' fill='%23d8eafa'/%3E%3Cpath d='M83 104c24-38 67-38 74 0' fill='none' stroke='%238ba6b8' stroke-width='8' stroke-linecap='round'/%3E%3C/svg%3E";
+
+function toISODate(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function dateByDaysAgo(daysAgo: number) {
+  const date = new Date();
+  date.setDate(date.getDate() - daysAgo);
+  return toISODate(date);
+}
+
+function todayISO() {
+  return dateByDaysAgo(0);
+}
 
 const localPhoto = (body: string) =>
   `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
@@ -384,6 +403,7 @@ function App() {
       id: "diary-1",
       recipeTitle: "青椒炒蛋",
       date: "昨天",
+      dateISO: dateByDaysAgo(1),
       source: "做过的菜",
       note: "下次可以加一点肉沫，口感更完整。",
       tags: ["快手", "家常", "低洗碗"],
@@ -500,6 +520,7 @@ function App() {
         id: `${recipe.id}-${Date.now()}`,
         recipeTitle: recipe.title,
         date: "今天",
+        dateISO: todayISO(),
         source,
         note: `由 ${source} 加入今日计划；缺口食材已自动减去库存。`,
         tags: [recipe.cuisine, recipe.difficulty, selectedTool.name],
@@ -557,7 +578,7 @@ function App() {
               planToday={planToday}
             />
           )}
-          {view === "diary" && <DiaryView diary={diary} shoppingList={shoppingList} />}
+          {view === "diary" && <DiaryView diary={diary} shoppingList={shoppingList} inventory={inventory} />}
         </main>
 
         <nav className="bottomNav" aria-label="主导航">
@@ -956,8 +977,10 @@ function IngredientPreview({ inventory }: { inventory: InventoryItem[] }) {
 }
 
 function IngredientWarehouse({ inventory }: { inventory: InventoryItem[] }) {
+  const [selectedInventoryId, setSelectedInventoryId] = useState(inventory[0]?.inventoryId ?? "");
   const totalPrice = inventory.reduce((sum, item) => sum + item.pricePaid, 0);
   const urgentCount = inventory.filter((item) => freshnessLevel(item) === "soon" || freshnessLevel(item) === "danger").length;
+  const selectedItem = inventory.find((item) => item.inventoryId === selectedInventoryId) ?? inventory[0];
 
   return (
     <div className="ingredientWarehouse">
@@ -985,44 +1008,63 @@ function IngredientWarehouse({ inventory }: { inventory: InventoryItem[] }) {
             <div className="zoneHeader">
               <div>
                 <h2>{section.icon}{section.label}</h2>
-                <p>{section.desc}</p>
+                <p>{section.desc}，左右滑动查看</p>
               </div>
               <span>{items.length} 件</span>
             </div>
-            <div className="ingredientDirectGrid">
+            <div className="ingredientRail" aria-label={`${section.label}食材`}>
               {items.map((item) => (
-                <IngredientCard item={item} key={item.inventoryId} />
+                <IngredientRailCard
+                  item={item}
+                  selected={selectedItem?.inventoryId === item.inventoryId}
+                  onSelect={() => setSelectedInventoryId(item.inventoryId)}
+                  key={item.inventoryId}
+                />
               ))}
             </div>
           </section>
         );
       })}
+
+      {selectedItem && <SelectedIngredientPanel item={selectedItem} />}
     </div>
   );
 }
 
-function IngredientCard({ item }: { item: InventoryItem }) {
+function IngredientRailCard({ item, selected, onSelect }: { item: InventoryItem; selected: boolean; onSelect: () => void }) {
   return (
-    <article className={`ingredientCard ${freshnessLevel(item)}`}>
-      <div className="ingredientPhotoWrap">
+    <button className={`ingredientRailCard ${freshnessLevel(item)} ${selected ? "selected" : ""}`} type="button" onClick={onSelect}>
+      <span className="ingredientPhotoWrap">
         <FoodImage src={item.photo} alt={item.name} />
-      </div>
-      <div className="ingredientBody">
-        <div className="ingredientTitle">
-          <strong>{item.name}</strong>
+      </span>
+      <strong>{item.name}</strong>
+      <small>{freshnessCopy(item)}</small>
+    </button>
+  );
+}
+
+function SelectedIngredientPanel({ item }: { item: InventoryItem }) {
+  return (
+    <section className={`selectedIngredientPanel ${freshnessLevel(item)}`}>
+      <div className="selectedIngredientHero">
+        <FoodImage src={item.photo} alt={item.name} />
+        <div>
+          <p className="eyebrow">Selected ingredient</p>
+          <h2>{item.name}</h2>
           <span className="freshChip">{freshnessCopy(item)}</span>
         </div>
-        <div className="ingredientMeta">
-          <span>{amountText(item)}</span>
-          <span>{storageText(item.storage)}</span>
-          <span>{item.pricePaid.toFixed(1)} 元</span>
-        </div>
-        <div className="storageTags">
-          {item.storageTags.slice(0, 2).map((tag) => <span key={tag}>{tag}</span>)}
-          {item.note && <span>{item.note}</span>}
-        </div>
       </div>
-    </article>
+      <div className="ingredientMeta">
+        <span>{amountText(item)}</span>
+        <span>{storageText(item.storage)}</span>
+        <span>{item.pricePaid.toFixed(1)} 元</span>
+        <span>{item.level1}</span>
+      </div>
+      <div className="storageTags">
+        {item.storageTags.slice(0, 3).map((tag) => <span key={tag}>{tag}</span>)}
+        {item.note && <span>{item.note}</span>}
+      </div>
+    </section>
   );
 }
 
@@ -1124,23 +1166,149 @@ function RecipesView({
   );
 }
 
-function DiaryView({ diary, shoppingList }: { diary: DiaryEntry[]; shoppingList: ShoppingLine[] }) {
+function parseISODate(iso: string) {
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function sameMonth(leftISO: string, rightISO: string) {
+  const left = parseISODate(leftISO);
+  const right = parseISODate(rightISO);
+  return left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth();
+}
+
+function calendarDatesFor(anchorISO: string) {
+  const anchor = parseISODate(anchorISO);
+  const firstDay = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const mondayOffset = (firstDay.getDay() + 6) % 7;
+  const start = new Date(firstDay);
+  start.setDate(firstDay.getDate() - mondayOffset);
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    return toISODate(date);
+  });
+}
+
+function dateTitle(iso: string) {
+  const date = parseISODate(iso);
+  return `${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+function monthTitle(iso: string) {
+  const date = parseISODate(iso);
+  return `${date.getFullYear()}年${date.getMonth() + 1}月`;
+}
+
+function inventoryDate(item: InventoryItem) {
+  return dateByDaysAgo(item.addedDaysAgo);
+}
+
+function DiaryView({ diary, shoppingList, inventory }: { diary: DiaryEntry[]; shoppingList: ShoppingLine[]; inventory: InventoryItem[] }) {
+  const [selectedDate, setSelectedDate] = useState(todayISO());
   const preference = diary.length > 2 ? "偏好快手家常与低洗碗路径" : "偏好信号正在积累";
+  const calendarDays = calendarDatesFor(selectedDate);
+  const monthlyIncome = inventory.filter((item) => sameMonth(inventoryDate(item), selectedDate));
+  const monthlyExpense = diary.filter((entry) => sameMonth(entry.dateISO, selectedDate));
+  const selectedIncome = inventory.filter((item) => inventoryDate(item) === selectedDate);
+  const selectedExpense = diary.filter((entry) => entry.dateISO === selectedDate);
+
+  function moveMonth(offset: number) {
+    const next = parseISODate(selectedDate);
+    next.setDate(1);
+    next.setMonth(next.getMonth() + offset);
+    setSelectedDate(toISODate(next));
+  }
+
   return (
     <section>
       <div className="sectionHeader">
         <div>
-          <p className="eyebrow">Cooking diary</p>
+          <p className="eyebrow">Food ledger</p>
           <h1>日记</h1>
-          <p className="pageSub">记录做菜行为，沉淀偏好。这里是后续个性化推荐的伏笔。</p>
+          <p className="pageSub">像银行卡收支一样看厨房：收入是存放的食材，支出是做掉的菜肴。</p>
         </div>
       </div>
       <div className="diaryInsight">
-        <Heart size={20} />
+        <CalendarDays size={20} />
         <div>
           <strong>{preference}</strong>
-          <p>收藏、今天吃什么、做过的菜会逐步形成你的口味画像。</p>
+          <p>入库和做菜记录会逐步形成你的口味画像。</p>
         </div>
+      </div>
+      <div className="ledgerSummary">
+        <div>
+          <span>本月入库</span>
+          <strong>+{monthlyIncome.length}<small>件食材</small></strong>
+        </div>
+        <div>
+          <span>本月做菜</span>
+          <strong>-{monthlyExpense.length}<small>道菜</small></strong>
+        </div>
+      </div>
+      <div className="ledgerCalendar">
+        <div className="calendarHeader">
+          <button type="button" onClick={() => moveMonth(-1)}>上月</button>
+          <strong>{monthTitle(selectedDate)}</strong>
+          <button type="button" onClick={() => moveMonth(1)}>下月</button>
+        </div>
+        <div className="calendarWeekdays">
+          {["一", "二", "三", "四", "五", "六", "日"].map((day) => <span key={day}>{day}</span>)}
+        </div>
+        <div className="calendarGrid">
+          {calendarDays.map((dateISO) => {
+            const dayIncome = inventory.filter((item) => inventoryDate(item) === dateISO).length;
+            const dayExpense = diary.filter((entry) => entry.dateISO === dateISO).length;
+            const isActive = dateISO === selectedDate;
+            const inMonth = sameMonth(dateISO, selectedDate);
+            const date = parseISODate(dateISO);
+
+            return (
+              <button className={`${isActive ? "active" : ""} ${inMonth ? "" : "muted"}`} type="button" data-date={dateISO} onClick={() => setSelectedDate(dateISO)} key={dateISO}>
+                <strong>{date.getDate()}</strong>
+                <span>
+                  {dayIncome > 0 && <i className="income">+{dayIncome}</i>}
+                  {dayExpense > 0 && <i className="expense">-{dayExpense}</i>}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div className="ledgerDetail">
+        <div className="ledgerDetailHeader">
+          <div>
+            <p className="eyebrow">Daily detail</p>
+            <h2>{dateTitle(selectedDate)}</h2>
+          </div>
+          <span>+{selectedIncome.length} / -{selectedExpense.length}</span>
+        </div>
+        {selectedIncome.length === 0 && selectedExpense.length === 0 && (
+          <div className="emptyLedger">这天还没有厨房收支记录。</div>
+        )}
+        {selectedIncome.map((item) => (
+          <article className="ledgerLine income" key={item.inventoryId}>
+            <FoodImage src={item.photo} alt={item.name} />
+            <div>
+              <span>食材入库</span>
+              <strong>{item.name}</strong>
+              <small>{amountText(item)} · {storageText(item.storage)}</small>
+            </div>
+            <b>+{item.pricePaid.toFixed(1)}</b>
+          </article>
+        ))}
+        {selectedExpense.map((entry) => (
+          <article className="ledgerLine expense" key={entry.id}>
+            <span className="ledgerIcon"><PenLine size={16} /></span>
+            <div>
+              <span>做菜支出</span>
+              <strong>{entry.recipeTitle}</strong>
+              <small>{entry.tags.join(" · ")}</small>
+            </div>
+            <b>-1</b>
+          </article>
+        ))}
       </div>
       {shoppingList.length > 0 && (
         <div className="shoppingOutput diaryShopping">
@@ -1150,16 +1318,6 @@ function DiaryView({ diary, shoppingList }: { diary: DiaryEntry[]; shoppingList:
           ))}
         </div>
       )}
-      <div className="diaryList">
-        {diary.map((entry) => (
-          <article key={entry.id}>
-            <span><PenLine size={15} /> {entry.date}</span>
-            <h2>{entry.recipeTitle}</h2>
-            <p>{entry.note}</p>
-            <div>{entry.tags.map((tag) => <small key={tag}>{tag}</small>)}</div>
-          </article>
-        ))}
-      </div>
     </section>
   );
 }

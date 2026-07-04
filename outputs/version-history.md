@@ -64,3 +64,20 @@ Product judgment:
 
 - v0.2.0 over-indexed on a visual metaphor. v0.2.1 corrects the MVP back to the core job: fast mobile inventory visibility and food decision support.
 - The fridge concept can return later as a home visualization or personalization layer, but the Warehouse tab must remain operational and direct.
+
+## v0.2.2 — 滑动仓库账本
+
+Date: 2026-07-05
+
+Scope:
+
+- Fixed Warehouse mobile overflow by constraining every warehouse layer to the app frame width.
+- Changed Warehouse storage zones into horizontal image rails, so long rows such as seasonings can be swiped inside their own row without widening the page.
+- Added ingredient selection inside the rails and a dedicated selected-ingredient detail panel.
+- Rebuilt Diary as a calendar ledger inspired by bank income/expense pages: food storage is income, cooked dishes are expense.
+- Calendar cells show daily `+` ingredient income and `-` dish expense counts; tapping a date updates the daily detail panel.
+
+Product judgment:
+
+- Inventory browsing should use local horizontal scrolling for dense categories, not vertical card sprawl.
+- Diary is no longer a passive list; it becomes a behavioral ledger that can later support preference mining, waste tracking, and cooking frequency analysis.

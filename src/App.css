@@ -211,6 +211,16 @@ h2 {
   gap: 16px;
 }
 
+.homeStack,
+.warehouseStack,
+.warehouseStack > *,
+.ingredientWarehouse,
+.ingredientWarehouse > * {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
 .profilePanel {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1248,59 +1258,112 @@ h2 {
   font-weight: 850;
 }
 
-.ingredientDirectGrid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
+.ingredientZone {
+  min-width: 0;
+  overflow: hidden;
 }
 
-.ingredientCard {
-  min-width: 0;
+.ingredientRail {
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  padding: 2px 2px 8px;
+}
+
+.ingredientRailCard {
+  flex: 0 0 104px;
+  min-width: 104px;
+  min-height: 142px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fffdf5;
+  color: var(--ink);
   display: grid;
-  grid-template-columns: 78px minmax(0, 1fr);
-  gap: 10px;
-  padding: 10px;
-  align-items: center;
+  justify-items: center;
+  align-content: center;
+  gap: 6px;
+  padding: 8px;
+  scroll-snap-align: start;
 }
 
-.ingredientCard.soon {
+.ingredientRailCard.selected {
+  border-color: rgba(111, 159, 186, 0.72);
+  background: #eaf7fb;
+  box-shadow: inset 0 0 0 2px rgba(255, 253, 245, 0.92);
+}
+
+.ingredientRailCard.soon {
   background: #fff9dc;
 }
 
-.ingredientCard.danger {
+.ingredientRailCard.danger {
   border-color: rgba(205, 91, 70, 0.32);
   background: #fff0ea;
 }
 
 .ingredientPhotoWrap {
   min-width: 0;
-  height: 76px;
+  width: 78px;
+  height: 72px;
   display: grid;
   place-items: center;
 }
 
-.ingredientCard .foodPhoto {
+.ingredientRailCard .foodPhoto {
   width: 74px;
   height: 68px;
 }
 
-.ingredientBody {
-  min-width: 0;
+.ingredientRailCard strong,
+.ingredientRailCard small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.ingredientTitle {
+.ingredientRailCard small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.selectedIngredientPanel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf5;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.selectedIngredientPanel.soon {
+  background: #fff9dc;
+}
+
+.selectedIngredientPanel.danger {
+  border-color: rgba(205, 91, 70, 0.32);
+  background: #fff0ea;
+}
+
+.selectedIngredientHero {
   min-width: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 10px;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
 }
 
-.ingredientTitle strong {
-  min-width: 0;
+.selectedIngredientHero .foodPhoto {
+  width: 82px;
+  height: 76px;
+}
+
+.selectedIngredientHero h2 {
+  margin-bottom: 7px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1432,6 +1495,244 @@ h2 {
 
 .shoppingOutput small {
   grid-column: 2;
+}
+
+.ledgerSummary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.ledgerSummary div,
+.ledgerCalendar,
+.ledgerDetail {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 253, 245, 0.84);
+}
+
+.ledgerSummary div {
+  min-width: 0;
+  padding: 12px;
+}
+
+.ledgerSummary span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.ledgerSummary strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 23px;
+}
+
+.ledgerSummary small {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ledgerCalendar {
+  min-width: 0;
+  padding: 12px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.calendarHeader {
+  display: grid;
+  grid-template-columns: 56px 1fr 56px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.calendarHeader button {
+  min-width: 0;
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff9dc;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.calendarWeekdays,
+.calendarGrid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.calendarWeekdays {
+  margin-bottom: 6px;
+}
+
+.calendarWeekdays span {
+  color: var(--muted);
+  text-align: center;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.calendarGrid {
+  gap: 5px;
+}
+
+.calendarGrid button {
+  min-width: 0;
+  min-height: 48px;
+  border: 1px solid rgba(69, 82, 92, 0.12);
+  border-radius: 8px;
+  background: #fffdf5;
+  color: var(--ink);
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  padding: 4px 2px;
+}
+
+.calendarGrid button.muted {
+  opacity: 0.38;
+}
+
+.calendarGrid button.active {
+  border-color: rgba(39, 49, 58, 0.25);
+  background: var(--yellow);
+}
+
+.calendarGrid strong {
+  font-size: 13px;
+}
+
+.calendarGrid span {
+  min-height: 16px;
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+}
+
+.calendarGrid i {
+  min-width: 16px;
+  border-radius: 999px;
+  padding: 0 3px;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 900;
+  line-height: 14px;
+}
+
+.calendarGrid i.income {
+  background: #e8f4fa;
+  color: #4e7f97;
+}
+
+.calendarGrid i.expense {
+  background: #fff0ea;
+  color: #b05b48;
+}
+
+.ledgerDetail {
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.ledgerDetailHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: start;
+}
+
+.ledgerDetailHeader h2 {
+  margin-bottom: 0;
+}
+
+.ledgerDetailHeader > span {
+  flex: 0 0 auto;
+  min-height: 30px;
+  border-radius: 999px;
+  background: #edf8fc;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  color: var(--blue-deep);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.emptyLedger {
+  border: 1px dashed rgba(69, 82, 92, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 249, 220, 0.58);
+  color: var(--muted);
+  padding: 14px;
+  text-align: center;
+  font-weight: 800;
+}
+
+.ledgerLine {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf5;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px;
+}
+
+.ledgerLine.income {
+  background: #f2f9fb;
+}
+
+.ledgerLine.expense {
+  background: #fff8f3;
+}
+
+.ledgerLine .foodPhoto,
+.ledgerIcon {
+  width: 46px;
+  height: 42px;
+}
+
+.ledgerIcon {
+  border-radius: 8px;
+  background: #fff9dc;
+  display: grid;
+  place-items: center;
+  color: #8b6b1f;
+}
+
+.ledgerLine div {
+  min-width: 0;
+}
+
+.ledgerLine span,
+.ledgerLine small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.ledgerLine strong {
+  display: block;
+  margin: 2px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ledgerLine b {
+  font-size: 13px;
 }
 
 @media (max-width: 360px) {
