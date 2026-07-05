@@ -39,8 +39,8 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-const PRODUCT_VERSION = "v0.3.3";
-const VERSION_NAME = "贴底工作台";
+const PRODUCT_VERSION = "v0.3.4";
+const VERSION_NAME = "居中推荐弹窗";
 
 type View = "home" | "warehouse" | "recipes" | "diary";
 type UploadMethod = "photo" | "online" | "receipt" | "manual";
@@ -1239,6 +1239,10 @@ function WarehouseView({
             onFavorite={() => toggleFavorite(fusionRecipe.id)}
             onMake={() => setRecipeFlipped(true)}
             onBack={() => setRecipeFlipped(false)}
+            onDismiss={() => {
+              setFusionCount(0);
+              setRecipeFlipped(false);
+            }}
             onPlanToday={() => planToday(fusionRecipe, "仓库融合")}
           />
         )}
@@ -1345,6 +1349,7 @@ function FusionResultPopup({
   onFavorite,
   onMake,
   onBack,
+  onDismiss,
   onPlanToday,
 }: {
   recipe: Recipe;
@@ -1355,20 +1360,25 @@ function FusionResultPopup({
   onFavorite: () => void;
   onMake: () => void;
   onBack: () => void;
+  onDismiss: () => void;
   onPlanToday: () => void;
 }) {
   const seasonings = recipeSeasonings(recipe);
   const ingredients = recipeMainIngredients(recipe);
 
   return (
-    <div className="fusionResultDock" aria-live="polite">
-      <div className="sparkBurst" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-        <i />
-      </div>
-      <div className={`fusionResultCard ${flipped ? "flipped" : ""}`}>
+    <div className="fusionResultLayer" aria-live="polite">
+      <div className="fusionResultDock">
+        <div className="sparkBurst" aria-hidden="true">
+          <i />
+          <i />
+          <i />
+          <i />
+        </div>
+        <button className="resultDismiss" type="button" onClick={onDismiss} aria-label="关闭推荐卡">
+          <X size={17} />
+        </button>
+        <div className={`fusionResultCard ${flipped ? "flipped" : ""}`}>
         <div className="fusionResultInner">
           <article className="fusionResultFace resultFront">
             <div className="resultKicker"><Sparkles size={15} /> 今日最推荐</div>
@@ -1428,6 +1438,7 @@ function FusionResultPopup({
               </button>
             </div>
           </article>
+        </div>
         </div>
       </div>
     </div>

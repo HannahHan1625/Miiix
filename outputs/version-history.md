@@ -175,3 +175,23 @@ Product judgment:
 - Warehouse is not a normal document page. It is the product's core creation surface, so its layout must be spatially controlled like a mobile tool.
 - The canvas and the material tray have different responsibilities: the canvas is for composition and feedback; the tray is for choosing inputs and triggering fusion.
 - The next quality gate is explaining the recommendation logic without reducing the white-space quality of the workbench.
+
+## v0.3.4 — 居中推荐弹窗
+
+Date: 2026-07-06
+
+Scope:
+
+- Changed the fusion recommendation card from a canvas-contained overlay to a page-level centered result layer.
+- Added a soft full-page overlay so the recommendation reads as a result moment for the whole Warehouse page.
+- Kept the card width constrained to mobile app width instead of spanning the full desktop viewport.
+- Added a close button to the recommendation card so users can return to the workbench and keep their current ingredient selection.
+- Verified the card center aligns with the viewport center, not the fusion canvas center.
+- Verified `制作` still flips the card to the tutorial side.
+- Verified `加入今天` still navigates to Diary and generates the shopping-list output.
+
+Product judgment:
+
+- The Warehouse canvas is for composing ingredients and tools; the generated recommendation is a page-level decision moment.
+- A centered result layer makes the recommendation feel intentional and prevents the user from reading it as another object inside the canvas.
+- The next quality gate is adding recommendation explanation inside or adjacent to this result layer without making the card feel crowded.
