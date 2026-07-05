@@ -2014,6 +2014,34 @@ h2 {
   font-weight: 900;
 }
 
+.trayFusionFooter {
+  width: 100%;
+  padding-top: 8px;
+}
+
+.trayFusionButton {
+  width: 100%;
+  min-height: 54px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fffdf5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 16px;
+  font-weight: 900;
+  box-shadow: 0 12px 26px rgba(39, 49, 58, 0.14);
+}
+
+.trayFusionButton:disabled {
+  background: #d8d4ce;
+  color: #8d8780;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
 .compactShoppingOutput {
   padding: 12px;
 }

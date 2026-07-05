@@ -39,8 +39,8 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-const PRODUCT_VERSION = "v0.3.0";
-const VERSION_NAME = "融合工作台";
+const PRODUCT_VERSION = "v0.3.1";
+const VERSION_NAME = "底部融合按钮";
 
 type View = "home" | "warehouse" | "recipes" | "diary";
 type UploadMethod = "photo" | "online" | "receipt" | "manual";
@@ -1162,6 +1162,15 @@ function WarehouseView({
     setFusionCount((current) => current + 1);
   }
 
+  function handleFusionAction() {
+    if (!hasSelection) return;
+    if (fusionCount > 0) {
+      planToday(fusionRecipe, "仓库融合");
+      return;
+    }
+    fuseNow();
+  }
+
   return (
     <section className="fusionStudio">
       <div className="fusionCanvas">
@@ -1214,7 +1223,7 @@ function WarehouseView({
             className="fusionButton"
             type="button"
             disabled={!hasSelection}
-            onClick={fusionCount > 0 ? () => planToday(fusionRecipe, "仓库融合") : fuseNow}
+            onClick={handleFusionAction}
           >
             <Sparkles size={17} /> {fusionCount > 0 ? "加入今天" : "融合"}
           </button>
@@ -1291,6 +1300,12 @@ function WarehouseView({
             ))}
           </div>
         )}
+
+        <div className="trayFusionFooter">
+          <button className="trayFusionButton" type="button" disabled={!hasSelection} onClick={handleFusionAction}>
+            <Sparkles size={17} /> {fusionCount > 0 ? "加入今天" : "融合"}
+          </button>
+        </div>
       </div>
 
       {shoppingList.length > 0 && (

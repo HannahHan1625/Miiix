@@ -118,3 +118,17 @@ Product judgment:
 - This is the first version where Warehouse behaves like the product's main creative engine instead of a storage utility.
 - Recipes should remain the library and reverse-inference surface; Warehouse should be the active decision surface.
 - The next quality gate is making fusion results more explainable and connecting them to real inventory deduction.
+
+## v0.3.1 — 底部融合按钮
+
+Date: 2026-07-05
+
+Scope:
+
+- Added a full-width fusion action button directly below the bottom material tray.
+- Reused the same action state as the main strip: disabled before ingredient selection, `融合` after selecting ingredients, and `加入今天` after fusion.
+- Extracted shared fusion action handling so the top result strip and bottom button cannot drift into different behavior.
+
+Product judgment:
+
+- The next action must live near the user's last action. After choosing ingredients/tools/preferences in the bottom tray, the user should not hunt upward for the fusion command.
