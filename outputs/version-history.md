@@ -155,3 +155,23 @@ Product judgment:
 - Fusion output must feel like a product reward, not a plain status update. The generated dish card turns the moment of recommendation into a clear decision point.
 - The bottom tray should only control the creative input loop: select, fuse, regenerate. The dish card owns recipe-level actions: favorite, make, and add to today's diary.
 - The next quality gate is persistence: generated favorites and diary/cooking records should survive reload and become usable preference-learning data.
+
+## v0.3.3 — 贴底工作台
+
+Date: 2026-07-06
+
+Scope:
+
+- Added a Warehouse-only screen class so the fusion workbench no longer inherits ordinary page padding and scrolling.
+- Removed sticky positioning from the material tray.
+- Changed Warehouse into a fixed-height workbench: the fusion canvas takes two thirds of the available screen area and the material tray takes the bottom third.
+- Ensured the fusion canvas itself does not scroll; it stays a calm white-space work area.
+- Reduced material tray card, image, tab, and button sizes so the tray no longer becomes a heavy half-screen panel.
+- Made the material tray touch the bottom navigation directly, with matching left and right edges.
+- Verified the fused recipe card remains inside the canvas and does not push the page into scrolling.
+
+Product judgment:
+
+- Warehouse is not a normal document page. It is the product's core creation surface, so its layout must be spatially controlled like a mobile tool.
+- The canvas and the material tray have different responsibilities: the canvas is for composition and feedback; the tray is for choosing inputs and triggering fusion.
+- The next quality gate is explaining the recommendation logic without reducing the white-space quality of the workbench.

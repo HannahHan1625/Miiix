@@ -39,8 +39,8 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-const PRODUCT_VERSION = "v0.3.2";
-const VERSION_NAME = "融合推荐卡";
+const PRODUCT_VERSION = "v0.3.3";
+const VERSION_NAME = "贴底工作台";
 
 type View = "home" | "warehouse" | "recipes" | "diary";
 type UploadMethod = "photo" | "online" | "receipt" | "manual";
@@ -661,7 +661,7 @@ function App() {
           <div className="versionPill">{VERSION_NAME}</div>
         </header>
 
-        <main className="screen">
+        <main className={`screen ${view === "warehouse" ? "warehouseScreen" : ""}`}>
           {view === "home" && (
             <HomeView
               stats={stats}
