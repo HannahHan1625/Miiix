@@ -99,3 +99,22 @@ Product judgment:
 
 - v0.2.3 closes an important interaction gap: upload methods must look actionable before real AI/OCR is connected.
 - The current recognition is still mocked; the next quality gate is replacing presets with a real OCR/vision pipeline and persisting user corrections as training feedback.
+
+## v0.3.0 — 融合工作台
+
+Date: 2026-07-05
+
+Scope:
+
+- Reframed Warehouse from an inventory browsing page into Miiix's core fusion workbench.
+- Added the core chain inside Warehouse: select ingredients, select kitchen tool, select food preference, then fuse.
+- Rebuilt Warehouse layout around a calm canvas with high whitespace and a bottom material tray inspired by flower-arranging apps.
+- Added bottom tray tabs for ingredients, tools, and preferences; each row uses local horizontal scrolling without widening the mobile page.
+- Fusion now produces an immediate result in the main action strip; after fusing, the action changes from `Fuse` to `Add to Today`.
+- Kept the downstream link to Diary and shopping-list generation through the existing `planToday` flow.
+
+Product judgment:
+
+- This is the first version where Warehouse behaves like the product's main creative engine instead of a storage utility.
+- Recipes should remain the library and reverse-inference surface; Warehouse should be the active decision surface.
+- The next quality gate is making fusion results more explainable and connecting them to real inventory deduction.

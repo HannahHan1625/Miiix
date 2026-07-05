@@ -136,6 +136,7 @@ p {
 
 .screen {
   overflow: auto;
+  overflow-x: hidden;
   padding: 26px 28px 106px;
 }
 
@@ -1669,6 +1670,352 @@ h2 {
 
 .storageTags span {
   background: rgba(246, 223, 143, 0.38);
+}
+
+.fusionStudio {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  min-height: calc(100dvh - 64px - 74px - 36px);
+  display: grid;
+  grid-template-rows: minmax(470px, 1fr) auto auto;
+  gap: 12px;
+}
+
+.fusionStudio > *,
+.fusionCanvas,
+.fusionStage,
+.fusionRecipeStrip,
+.fusionTray,
+.fusionRail {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.fusionCanvas {
+  position: relative;
+  min-height: 470px;
+  border-radius: 8px;
+  background: #f8f7f5;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  padding: 72px 14px 12px;
+}
+
+.fusionTopControls {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.fusionTopRight {
+  display: inline-flex;
+  gap: 10px;
+}
+
+.roundIconButton {
+  width: 54px;
+  height: 54px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 16px 34px rgba(39, 49, 58, 0.1);
+}
+
+.fusionStage {
+  position: relative;
+  min-height: 300px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+.fusionStage > p {
+  color: #a9a29b;
+  font-size: 16px;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.fusionToolAnchor {
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  z-index: 2;
+  width: 156px;
+  min-height: 160px;
+  transform: translate(-50%, -50%);
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 8px;
+  color: var(--ink);
+}
+
+.fusionToolAnchor img {
+  width: 150px;
+  height: 126px;
+  object-fit: contain;
+  filter: drop-shadow(0 22px 24px rgba(54, 61, 64, 0.16));
+}
+
+.fusionToolAnchor span {
+  min-height: 26px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 850;
+  box-shadow: 0 10px 24px rgba(39, 49, 58, 0.08);
+}
+
+.canvasIngredient {
+  position: absolute;
+  left: 50%;
+  top: 49%;
+  z-index: 3;
+  width: 90px;
+  min-height: 104px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y)));
+}
+
+.canvasIngredient .foodPhoto {
+  width: 76px;
+  height: 70px;
+  border-width: 3px;
+}
+
+.canvasIngredient span {
+  max-width: 90px;
+  min-height: 24px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 10px 24px rgba(39, 49, 58, 0.08);
+}
+
+.fusionRecipeStrip {
+  position: relative;
+  z-index: 4;
+  min-height: 74px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 10px 9px 18px;
+  box-shadow: 0 16px 36px rgba(39, 49, 58, 0.08);
+}
+
+.fusionRecipeStrip div {
+  min-width: 0;
+}
+
+.fusionRecipeStrip span,
+.fusionRecipeStrip small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 820;
+}
+
+.fusionRecipeStrip strong {
+  display: block;
+  margin: 2px 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fusionButton {
+  min-height: 54px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fffdf5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 18px;
+  font-weight: 900;
+}
+
+.fusionButton:disabled {
+  background: #d8d4ce;
+  color: #8d8780;
+  cursor: not-allowed;
+}
+
+.fusionTray {
+  position: sticky;
+  bottom: 0;
+  z-index: 8;
+  border: 1px solid rgba(39, 49, 58, 0.08);
+  border-radius: 24px 24px 8px 8px;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 10px 10px 12px;
+  box-shadow: 0 -18px 38px rgba(39, 49, 58, 0.09);
+  backdrop-filter: blur(18px);
+}
+
+.fusionTrayTabs {
+  height: 48px;
+  border: 1px solid rgba(39, 49, 58, 0.08);
+  border-radius: 999px;
+  background: #f7f5f1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  padding: 3px;
+  margin-bottom: 10px;
+}
+
+.fusionTrayTabs button {
+  min-width: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.fusionTrayTabs button.active {
+  background: #ecebe8;
+}
+
+.fusionRail {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 2px 2px 8px;
+}
+
+.fusionPickerCard {
+  position: relative;
+  flex: 0 0 96px;
+  min-height: 140px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 6px;
+  padding: 6px 2px;
+  text-align: center;
+}
+
+.fusionPickerCard.selected {
+  border-color: rgba(39, 49, 58, 0.1);
+  background: #f2f9fb;
+}
+
+.fusionPickerCard .foodPhoto {
+  width: 78px;
+  height: 74px;
+}
+
+.fusionPickerCard img {
+  width: 88px;
+  height: 78px;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 15px rgba(54, 61, 64, 0.12));
+}
+
+.fusionPickerCard strong,
+.fusionPickerCard small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fusionPickerCard strong {
+  font-size: 14px;
+}
+
+.fusionPickerCard small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.fusionPickerCard.tool {
+  flex-basis: 126px;
+  background: linear-gradient(180deg, var(--tool), rgba(255, 255, 255, 0.4));
+}
+
+.fusionPickerCard.preference {
+  flex-basis: 152px;
+  min-height: 116px;
+  align-content: center;
+  background: linear-gradient(180deg, var(--pref), rgba(255, 255, 255, 0.62));
+  padding: 10px;
+}
+
+.fusionPickerCard.preference small {
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.preferenceDot {
+  width: 22px;
+  height: 22px;
+  border: 4px solid rgba(255, 255, 255, 0.88);
+  border-radius: 50%;
+  background: var(--pref);
+  box-shadow: 0 6px 12px rgba(39, 49, 58, 0.08);
+}
+
+.pickerBadge {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  min-height: 22px;
+  border-radius: 999px;
+  background: var(--yellow);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.compactShoppingOutput {
+  padding: 12px;
 }
 
 .foodPhoto {
