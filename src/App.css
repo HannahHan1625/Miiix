@@ -1172,6 +1172,35 @@ input[type="range"] {
   to { opacity: 0; }
 }
 
+@keyframes resultPop {
+  from {
+    opacity: 0;
+    transform: translateY(26px) scale(0.92);
+  }
+  58% {
+    opacity: 1;
+    transform: translateY(-5px) scale(1.02);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes sparkFloat {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.4);
+  }
+  42% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-18px) scale(1);
+  }
+}
+
 @media (max-width: 880px) {
   .appShell {
     padding: 0;
@@ -1674,12 +1703,13 @@ h2 {
 
 .fusionStudio {
   min-width: 0;
-  width: 100%;
-  max-width: 100%;
-  min-height: calc(100dvh - 64px - 74px - 36px);
+  width: calc(100% + 28px);
+  max-width: calc(100% + 28px);
+  min-height: calc(100dvh - 64px - 74px);
+  margin: -18px -14px 0;
   display: grid;
-  grid-template-rows: minmax(470px, 1fr) auto auto;
-  gap: 12px;
+  grid-template-rows: minmax(460px, 1fr) auto auto;
+  gap: 0;
 }
 
 .fusionStudio > *,
@@ -1695,13 +1725,13 @@ h2 {
 
 .fusionCanvas {
   position: relative;
-  min-height: 470px;
-  border-radius: 8px;
+  min-height: 460px;
+  border-radius: 0;
   background: #f8f7f5;
   overflow: hidden;
   display: grid;
-  grid-template-rows: 1fr auto;
-  padding: 72px 14px 12px;
+  grid-template-rows: 1fr;
+  padding: 72px 14px 18px;
 }
 
 .fusionTopControls {
@@ -1738,6 +1768,14 @@ h2 {
   display: grid;
   place-items: center;
   text-align: center;
+  transition:
+    transform 420ms cubic-bezier(0.18, 0.92, 0.22, 1),
+    opacity 420ms ease;
+}
+
+.fusionCanvas.hasResult .fusionStage {
+  transform: translateY(-72px) scale(0.84);
+  opacity: 0.76;
 }
 
 .fusionStage > p {
@@ -1876,14 +1914,246 @@ h2 {
   cursor: not-allowed;
 }
 
+.fusionResultDock {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  z-index: 12;
+  min-width: 0;
+  perspective: 1200px;
+  animation: resultPop 520ms cubic-bezier(0.18, 0.92, 0.22, 1) both;
+}
+
+.sparkBurst {
+  position: absolute;
+  inset: -22px 24px auto;
+  height: 42px;
+  pointer-events: none;
+}
+
+.sparkBurst i {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--yellow);
+  box-shadow: 0 0 0 4px rgba(246, 223, 143, 0.2);
+  animation: sparkFloat 880ms ease-out both;
+}
+
+.sparkBurst i:nth-child(1) {
+  left: 14%;
+  top: 18px;
+}
+
+.sparkBurst i:nth-child(2) {
+  left: 34%;
+  top: 2px;
+  background: var(--blue);
+  animation-delay: 80ms;
+}
+
+.sparkBurst i:nth-child(3) {
+  right: 28%;
+  top: 9px;
+  background: var(--peach);
+  animation-delay: 120ms;
+}
+
+.sparkBurst i:nth-child(4) {
+  right: 10%;
+  top: 24px;
+  background: var(--green);
+  animation-delay: 160ms;
+}
+
+.fusionResultCard {
+  position: relative;
+  min-height: 360px;
+  transform-style: preserve-3d;
+}
+
+.fusionResultInner {
+  position: relative;
+  min-height: 360px;
+  transform-style: preserve-3d;
+  transition: transform 520ms cubic-bezier(0.2, 0.88, 0.24, 1);
+}
+
+.fusionResultCard.flipped .fusionResultInner {
+  transform: rotateY(180deg);
+}
+
+.fusionResultFace {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  border: 1px solid rgba(39, 49, 58, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 253, 245, 0.97);
+  box-shadow: 0 24px 52px rgba(39, 49, 58, 0.16);
+  backface-visibility: hidden;
+  overflow: hidden;
+  padding: 13px;
+}
+
+.resultFront {
+  z-index: 2;
+  pointer-events: auto;
+}
+
+.resultBack {
+  z-index: 1;
+  transform: rotateY(180deg);
+  pointer-events: none;
+}
+
+.fusionResultCard.flipped .resultFront {
+  z-index: 1;
+  pointer-events: none;
+}
+
+.fusionResultCard.flipped .resultBack {
+  z-index: 2;
+  pointer-events: auto;
+}
+
+.resultKicker {
+  width: fit-content;
+  min-height: 26px;
+  border-radius: 999px;
+  background: #edf8fc;
+  color: #5a7f93;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.dishHero {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  margin: 10px 0 8px;
+}
+
+.dishCutout {
+  width: 104px;
+  height: 92px;
+  object-fit: cover;
+  border-radius: 44% 56% 46% 54% / 54% 48% 52% 46%;
+  border: 3px solid rgba(255, 253, 245, 0.98);
+  outline: 1px solid rgba(39, 49, 58, 0.12);
+  filter: drop-shadow(0 15px 18px rgba(54, 61, 64, 0.18));
+  background: #fffdf5;
+}
+
+.dishHero h2,
+.resultBack h2 {
+  margin: 0 0 5px;
+  font-size: 19px;
+  line-height: 1.2;
+}
+
+.dishHero p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.fusionNeedGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin: 9px 0;
+}
+
+.fusionNeedGrid div {
+  min-width: 0;
+  border: 1px dashed rgba(69, 82, 92, 0.16);
+  border-radius: 8px;
+  background: #fff9dc;
+  padding: 8px;
+}
+
+.fusionNeedGrid span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  margin-bottom: 3px;
+}
+
+.fusionNeedGrid strong {
+  display: block;
+  min-height: 34px;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.resultActions {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.favoriteAction.active {
+  background: #fff9dc;
+  border-color: rgba(139, 107, 31, 0.24);
+  color: #8b6b1f;
+}
+
+.tutorialSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.tutorialSummary span {
+  min-height: 25px;
+  border-radius: 999px;
+  background: #edf8fc;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.fusionNeedGrid.tutorial {
+  margin-bottom: 8px;
+}
+
+.tutorialSteps {
+  min-height: 108px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.52;
+}
+
 .fusionTray {
   position: sticky;
   bottom: 0;
   z-index: 8;
   border: 1px solid rgba(39, 49, 58, 0.08);
-  border-radius: 24px 24px 8px 8px;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 24px 24px 0 0;
   background: rgba(255, 255, 255, 0.96);
-  padding: 10px 10px 12px;
+  padding: 10px 18px 12px;
   box-shadow: 0 -18px 38px rgba(39, 49, 58, 0.09);
   backdrop-filter: blur(18px);
 }

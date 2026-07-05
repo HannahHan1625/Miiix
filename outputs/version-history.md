@@ -132,3 +132,26 @@ Scope:
 Product judgment:
 
 - The next action must live near the user's last action. After choosing ingredients/tools/preferences in the bottom tray, the user should not hunt upward for the fusion command.
+
+## v0.3.2 — 融合推荐卡
+
+Date: 2026-07-05
+
+Scope:
+
+- Checked and corrected kitchen-tool image/name matching: wok, steamer, oven, induction cooker, juicer, soy milk maker, and coffee machine now use matching visual assets and alt text.
+- Replaced the fusion result status strip with a pop-up recommendation card anchored in the lower canvas area.
+- Added a surprise pop animation and sparkle burst when the recommended dish appears.
+- Styled the recommended dish image as a cutout-like card image with outline and drop shadow.
+- Added recipe details to the generated dish card: time, difficulty, required ingredients, seasonings, cuisine, calories, and recommendation reason.
+- Added card actions for `收藏` and `制作`.
+- Changed `制作` into a flip-card interaction: the back side shows the cooking tutorial, tool, preference, cuisine, calories, and a final `加入今天` action.
+- Changed the tray action after fusion from `加入今天` to `再融合`, so planning/cooking happens inside the dish card instead of the bottom tray.
+- Aligned the warehouse fusion tray with the bottom navigation width at mobile viewport.
+- Fixed the flip card hit-testing issue by raising the result popup above the sticky material tray and increasing card height so buttons are not clipped.
+
+Product judgment:
+
+- Fusion output must feel like a product reward, not a plain status update. The generated dish card turns the moment of recommendation into a clear decision point.
+- The bottom tray should only control the creative input loop: select, fuse, regenerate. The dish card owns recipe-level actions: favorite, make, and add to today's diary.
+- The next quality gate is persistence: generated favorites and diary/cooking records should survive reload and become usable preference-learning data.

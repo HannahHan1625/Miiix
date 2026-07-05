@@ -39,8 +39,8 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-const PRODUCT_VERSION = "v0.3.1";
-const VERSION_NAME = "底部融合按钮";
+const PRODUCT_VERSION = "v0.3.2";
+const VERSION_NAME = "融合推荐卡";
 
 type View = "home" | "warehouse" | "recipes" | "diary";
 type UploadMethod = "photo" | "online" | "receipt" | "manual";
@@ -196,6 +196,14 @@ const recipeImages = {
   pepperEgg: "https://images.unsplash.com/photo-1495214783159-3503fd1b572d?auto=format&fit=crop&w=720&q=90",
 };
 
+const toolPhotos = {
+  wok: localPhoto("<defs><linearGradient id='g' x1='0' x2='1'><stop stop-color='#2d3436'/><stop offset='1' stop-color='#6f777a'/></linearGradient></defs><rect width='240' height='180' fill='#fffaf0'/><g filter='drop-shadow(0 12px 12px rgba(39,49,58,.22))'><path d='M48 98c13 34 132 34 146 0' fill='url(#g)'/><ellipse cx='121' cy='95' rx='73' ry='26' fill='#1f2528'/><ellipse cx='121' cy='89' rx='57' ry='15' fill='#4f5b5f'/><path d='M187 91c23-7 39-6 47 3' fill='none' stroke='#4a4f50' stroke-width='10' stroke-linecap='round'/><path d='M55 90c-18-6-32-4-42 4' fill='none' stroke='#4a4f50' stroke-width='8' stroke-linecap='round'/><path d='M94 80c12-15 38-18 56-6' fill='none' stroke='#e9d9a8' stroke-width='4' stroke-linecap='round'/></g>"),
+  oven: localPhoto("<rect width='240' height='180' fill='#fff7e8'/><g filter='drop-shadow(0 14px 14px rgba(39,49,58,.2))'><rect x='47' y='43' width='146' height='94' rx='18' fill='#f0d0b7' stroke='#c28b78' stroke-width='4'/><rect x='66' y='62' width='78' height='49' rx='10' fill='#fffdf5' stroke='#8b8f91' stroke-width='4'/><circle cx='166' cy='70' r='9' fill='#fffdf5' stroke='#8b8f91' stroke-width='4'/><circle cx='166' cy='101' r='9' fill='#fffdf5' stroke='#8b8f91' stroke-width='4'/><rect x='74' y='119' width='92' height='8' rx='4' fill='#8b8f91'/><path d='M84 83c14 12 31 12 44 0' fill='none' stroke='#f6c66f' stroke-width='5' stroke-linecap='round'/></g>"),
+  juicer: localPhoto("<rect width='240' height='180' fill='#f5fbf8'/><g filter='drop-shadow(0 14px 14px rgba(39,49,58,.18))'><path d='M85 38h62l-8 78H96z' fill='#d7ebee' stroke='#8ea9ac' stroke-width='4'/><path d='M100 51h30l-4 51h-22z' fill='#f7df85'/><path d='M149 58c25 9 22 42-5 47' fill='none' stroke='#8ea9ac' stroke-width='7' stroke-linecap='round'/><rect x='87' y='117' width='62' height='18' rx='7' fill='#9fbec8'/><rect x='76' y='135' width='86' height='14' rx='7' fill='#7e9299'/><circle cx='119' cy='130' r='4' fill='#fffdf5'/></g>"),
+  induction: localPhoto("<rect width='240' height='180' fill='#f8f7f5'/><g filter='drop-shadow(0 13px 14px rgba(39,49,58,.18))'><rect x='48' y='61' width='144' height='76' rx='18' fill='#f7f4ef' stroke='#c5bbb0' stroke-width='4'/><circle cx='101' cy='98' r='27' fill='none' stroke='#647176' stroke-width='5'/><circle cx='101' cy='98' r='15' fill='none' stroke='#9aa5a9' stroke-width='3'/><rect x='142' y='82' width='30' height='18' rx='5' fill='#27313a'/><circle cx='151' cy='114' r='5' fill='#f2c9bd'/><circle cx='169' cy='114' r='5' fill='#b9d9ea'/></g>"),
+  soyMilk: localPhoto("<rect width='240' height='180' fill='#fffaf0'/><g filter='drop-shadow(0 14px 14px rgba(39,49,58,.18))'><path d='M83 45h70l-9 92H92z' fill='#f7f1df' stroke='#b6aaa0' stroke-width='4'/><path d='M95 58h46l-5 49H100z' fill='#fffdf5' stroke='#d8cbb8' stroke-width='3'/><path d='M154 63c24 6 25 43 1 52' fill='none' stroke='#b6aaa0' stroke-width='7' stroke-linecap='round'/><rect x='97' y='113' width='39' height='14' rx='7' fill='#f6df8f'/><circle cx='116' cy='120' r='4' fill='#8b6b1f'/><rect x='72' y='137' width='96' height='13' rx='7' fill='#cddfba'/></g>"),
+};
+
 const categoryTree = [
   {
     level1: "肉禽蛋品",
@@ -324,10 +332,12 @@ function food(
 }
 
 const kitchenTools: KitchenTool[] = [
-  { id: "wok", name: "复古炒锅", subtitle: "爆炒 / 盖饭", tone: "#c7dcef", image: foodPhotos.soy },
+  { id: "wok", name: "复古炒锅", subtitle: "爆炒 / 盖饭", tone: "#c7dcef", image: toolPhotos.wok },
   { id: "steamer", name: "白色蒸锅", subtitle: "蒸蛋 / 清蒸", tone: "#f4df9d", image: "/assets/tool-steamer-reference.png" },
-  { id: "oven", name: "奶油烤箱", subtitle: "焗烤 / 甜点", tone: "#f2c9bd", image: recipeImages.steamedEgg },
-  { id: "juicer", name: "果汁机", subtitle: "果汁 / 奶昔", tone: "#d6ead7", image: foodPhotos.lemon },
+  { id: "oven", name: "奶油烤箱", subtitle: "焗烤 / 甜点", tone: "#f2c9bd", image: toolPhotos.oven },
+  { id: "induction", name: "电磁炉", subtitle: "快煎 / 小火炖", tone: "#d8eafa", image: toolPhotos.induction },
+  { id: "juicer", name: "果汁机", subtitle: "果汁 / 奶昔", tone: "#d6ead7", image: toolPhotos.juicer },
+  { id: "soyMilk", name: "豆浆机", subtitle: "豆浆 / 浓汤", tone: "#dfe8c8", image: toolPhotos.soyMilk },
   { id: "coffee", name: "复古咖啡机", subtitle: "咖啡 / 特调", tone: "#f6dfa6", image: "/assets/tool-coffee-reference.png" },
 ];
 
@@ -665,6 +675,8 @@ function App() {
               inventory={inventory}
               activeToolId={activeToolId}
               setActiveToolId={setActiveToolId}
+              favorites={favorites}
+              toggleFavorite={toggleFavorite}
               shoppingList={shoppingList}
               planToday={planToday}
             />
@@ -1120,12 +1132,16 @@ function WarehouseView({
   inventory,
   activeToolId,
   setActiveToolId,
+  favorites,
+  toggleFavorite,
   shoppingList,
   planToday,
 }: {
   inventory: InventoryItem[];
   activeToolId: string;
   setActiveToolId: (id: string) => void;
+  favorites: string[];
+  toggleFavorite: (recipeId: string) => void;
   shoppingList: ShoppingLine[];
   planToday: (recipe: Recipe, source: string) => void;
 }) {
@@ -1133,6 +1149,7 @@ function WarehouseView({
   const [activeTray, setActiveTray] = useState<FusionTray>("ingredients");
   const [preferenceId, setPreferenceId] = useState("quick");
   const [fusionCount, setFusionCount] = useState(0);
+  const [recipeFlipped, setRecipeFlipped] = useState(false);
   const selectedTool = kitchenTools.find((tool) => tool.id === activeToolId) ?? kitchenTools[0];
   const selectedPreference = foodPreferences.find((item) => item.id === preferenceId) ?? foodPreferences[0];
   const selectedItems = selectedInventoryIds
@@ -1143,6 +1160,7 @@ function WarehouseView({
 
   function toggleIngredient(inventoryId: string) {
     setFusionCount(0);
+    setRecipeFlipped(false);
     setSelectedInventoryIds((current) =>
       current.includes(inventoryId)
         ? current.filter((id) => id !== inventoryId)
@@ -1155,25 +1173,23 @@ function WarehouseView({
   function clearWorkbench() {
     setSelectedInventoryIds([]);
     setFusionCount(0);
+    setRecipeFlipped(false);
   }
 
   function fuseNow() {
     if (!hasSelection) return;
+    setRecipeFlipped(false);
     setFusionCount((current) => current + 1);
   }
 
   function handleFusionAction() {
     if (!hasSelection) return;
-    if (fusionCount > 0) {
-      planToday(fusionRecipe, "仓库融合");
-      return;
-    }
     fuseNow();
   }
 
   return (
     <section className="fusionStudio">
-      <div className="fusionCanvas">
+      <div className={`fusionCanvas ${fusionCount > 0 ? "hasResult" : ""}`}>
         <div className="fusionTopControls">
           <button className="roundIconButton" type="button" onClick={clearWorkbench} aria-label="清空选择">
             <X size={20} />
@@ -1213,21 +1229,19 @@ function WarehouseView({
           )}
         </div>
 
-        <div className="fusionRecipeStrip">
-          <div>
-            <span>{fusionCount > 0 ? "已融合结果" : hasSelection ? `${selectedItems.length} 个食材已选择` : "未选择食材"}</span>
-            <strong>{fusionCount > 0 ? fusionRecipe.title : hasSelection ? "准备融合生成菜谱" : "等待融合"}</strong>
-            <small>{fusionCount > 0 ? `${selectedTool.name} · ${selectedPreference.label} · ${fusionRecipe.minutes} 分钟` : `${selectedTool.name} · ${selectedPreference.label}`}</small>
-          </div>
-          <button
-            className="fusionButton"
-            type="button"
-            disabled={!hasSelection}
-            onClick={handleFusionAction}
-          >
-            <Sparkles size={17} /> {fusionCount > 0 ? "加入今天" : "融合"}
-          </button>
-        </div>
+        {fusionCount > 0 && (
+          <FusionResultPopup
+            recipe={fusionRecipe}
+            selectedTool={selectedTool}
+            selectedPreference={selectedPreference}
+            flipped={recipeFlipped}
+            favorite={favorites.includes(fusionRecipe.id)}
+            onFavorite={() => toggleFavorite(fusionRecipe.id)}
+            onMake={() => setRecipeFlipped(true)}
+            onBack={() => setRecipeFlipped(false)}
+            onPlanToday={() => planToday(fusionRecipe, "仓库融合")}
+          />
+        )}
       </div>
 
       <div className="fusionTray">
@@ -1269,6 +1283,7 @@ function WarehouseView({
                 onClick={() => {
                   setActiveToolId(tool.id);
                   setFusionCount(0);
+                  setRecipeFlipped(false);
                 }}
                 key={tool.id}
               >
@@ -1290,6 +1305,7 @@ function WarehouseView({
                 onClick={() => {
                   setPreferenceId(preference.id);
                   setFusionCount(0);
+                  setRecipeFlipped(false);
                 }}
                 key={preference.id}
               >
@@ -1303,7 +1319,7 @@ function WarehouseView({
 
         <div className="trayFusionFooter">
           <button className="trayFusionButton" type="button" disabled={!hasSelection} onClick={handleFusionAction}>
-            <Sparkles size={17} /> {fusionCount > 0 ? "加入今天" : "融合"}
+            <Sparkles size={17} /> {fusionCount > 0 ? "再融合" : "融合"}
           </button>
         </div>
       </div>
@@ -1317,6 +1333,104 @@ function WarehouseView({
         </div>
       )}
     </section>
+  );
+}
+
+function FusionResultPopup({
+  recipe,
+  selectedTool,
+  selectedPreference,
+  flipped,
+  favorite,
+  onFavorite,
+  onMake,
+  onBack,
+  onPlanToday,
+}: {
+  recipe: Recipe;
+  selectedTool: KitchenTool;
+  selectedPreference: FoodPreference;
+  flipped: boolean;
+  favorite: boolean;
+  onFavorite: () => void;
+  onMake: () => void;
+  onBack: () => void;
+  onPlanToday: () => void;
+}) {
+  const seasonings = recipeSeasonings(recipe);
+  const ingredients = recipeMainIngredients(recipe);
+
+  return (
+    <div className="fusionResultDock" aria-live="polite">
+      <div className="sparkBurst" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+        <i />
+      </div>
+      <div className={`fusionResultCard ${flipped ? "flipped" : ""}`}>
+        <div className="fusionResultInner">
+          <article className="fusionResultFace resultFront">
+            <div className="resultKicker"><Sparkles size={15} /> 今日最推荐</div>
+            <div className="dishHero">
+              <img className="dishCutout" src={recipe.image} alt={recipe.title} onError={(event) => { event.currentTarget.src = fallbackImage; }} />
+              <div>
+                <h2>{recipe.title}</h2>
+                <p>{recipe.reason}</p>
+              </div>
+            </div>
+            <RecipeMeta recipe={recipe} />
+            <div className="fusionNeedGrid">
+              <div>
+                <span>需要食材</span>
+                <strong>{ingredients.join("、") || "当前已选食材"}</strong>
+              </div>
+              <div>
+                <span>调味料</span>
+                <strong>{seasonings.join("、") || "按口味微调"}</strong>
+              </div>
+            </div>
+            <div className="resultActions">
+              <button className={`ghostButton favoriteAction ${favorite ? "active" : ""}`} type="button" onClick={onFavorite}>
+                {favorite ? <BookmarkCheck size={16} /> : <Bookmark size={16} />} 收藏
+              </button>
+              <button className="primaryButton" type="button" onClick={onMake}>
+                <ChefHat size={16} /> 制作
+              </button>
+            </div>
+          </article>
+
+          <article className="fusionResultFace resultBack">
+            <div className="resultKicker"><ClipboardList size={15} /> 制作教程</div>
+            <h2>{recipe.title}</h2>
+            <div className="tutorialSummary">
+              <span>{selectedTool.name}</span>
+              <span>{selectedPreference.label}</span>
+              <span>{recipe.minutes} 分钟</span>
+            </div>
+            <div className="fusionNeedGrid tutorial">
+              <div>
+                <span>菜系</span>
+                <strong>{recipe.cuisine}</strong>
+              </div>
+              <div>
+                <span>卡路里</span>
+                <strong>{recipe.calories} kcal</strong>
+              </div>
+            </div>
+            <ol className="tutorialSteps">
+              {recipe.steps.map((step) => <li key={step}>{step}</li>)}
+            </ol>
+            <div className="resultActions">
+              <button className="ghostButton" type="button" onClick={onBack}>返回卡片</button>
+              <button className="primaryButton" type="button" onClick={onPlanToday}>
+                <NotebookPen size={16} /> 加入今天
+              </button>
+            </div>
+          </article>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1335,7 +1449,8 @@ function buildFusionRecipe(
     const estimatedWeight = item.amountMode === "weight" ? item.amount : Math.max(item.amount, 1) * Math.max(item.defaultWeight / Math.max(item.defaultCount, 1), 80);
     return sum + (estimatedWeight / 100) * item.caloriesPer100g;
   }, 0);
-  const toolExtraMinutes = selectedTool.id === "oven" ? 8 : selectedTool.id === "steamer" ? 4 : selectedTool.id === "coffee" ? 3 : 0;
+  const toolExtraMinutes =
+    selectedTool.id === "oven" ? 8 : selectedTool.id === "steamer" ? 4 : selectedTool.id === "coffee" ? 3 : selectedTool.id === "soyMilk" ? 12 : 0;
   const required = Array.from(new Set([...names, ...fusionSupportIngredients(selectedTool, selectedPreference, hasFruit)]));
 
   return {
@@ -1364,6 +1479,7 @@ function fusionTitle(
   if (!names.length) return "选择食材后开始融合";
   const coreNames = names.slice(0, 3).join("、");
   if (selectedTool.id === "juicer" || selectedTool.id === "coffee") return `${coreNames}清爽特调`;
+  if (selectedTool.id === "soyMilk") return `${coreNames}暖饮浓汤`;
   if (selectedTool.id === "steamer") return `${coreNames}轻蒸碗`;
   if (selectedTool.id === "oven") return `${coreNames}焗烤小盘`;
   if (selectedPreference.id === "creative" && hasFruit && hasProtein) return `${coreNames}果香咸甜实验`;
@@ -1373,6 +1489,7 @@ function fusionTitle(
 
 function fusionSupportIngredients(selectedTool: KitchenTool, selectedPreference: FoodPreference, hasFruit: boolean) {
   if (selectedTool.id === "juicer" || selectedTool.id === "coffee") return hasFruit ? ["柠檬", "蜂蜜"] : ["牛奶", "冰块"];
+  if (selectedTool.id === "soyMilk") return ["清水", "少量糖"];
   if (selectedPreference.id === "zhejiang") return ["生抽", "少量糖"];
   if (selectedPreference.id === "fresh") return ["柠檬", "橄榄油"];
   return ["生抽"];
@@ -1381,6 +1498,9 @@ function fusionSupportIngredients(selectedTool: KitchenTool, selectedPreference:
 function fusionSteps(selectedTool: KitchenTool, selectedPreference: FoodPreference, hasFruit: boolean, hasProtein: boolean, hasVegetable: boolean) {
   if (selectedTool.id === "juicer" || selectedTool.id === "coffee") {
     return ["食材清洗后切小块。", "保留一点果肉做层次，其余打碎或萃取。", "按酸甜度补柠檬或蜂蜜。", "冷藏 5 分钟后饮用。"];
+  }
+  if (selectedTool.id === "soyMilk") {
+    return ["把食材切小，避开太硬或筋膜多的部分。", "加入清水到建议水位，选择浓汤或豆浆模式。", "完成后按口味补少量糖或盐。", "倒出后静置 2 分钟，让口感更顺。"];
   }
   if (selectedTool.id === "steamer") {
     return ["主料切成容易入口的大小。", "蛋液或清汤作为底味。", "中火蒸到刚熟，避免过老。", "出锅后补生抽或香油。"];
@@ -1874,6 +1994,16 @@ function DiaryView({ diary, shoppingList, inventory }: { diary: DiaryEntry[]; sh
       )}
     </section>
   );
+}
+
+const seasoningWords = new Set(["生抽", "少量糖", "糖", "柠檬", "橄榄油", "蜂蜜", "牛奶", "冰块", "清水", "盐"]);
+
+function recipeSeasonings(recipe: Recipe) {
+  return recipe.required.filter((item) => seasoningWords.has(item));
+}
+
+function recipeMainIngredients(recipe: Recipe) {
+  return recipe.required.filter((item) => !seasoningWords.has(item));
 }
 
 function RecipeMeta({ recipe }: { recipe: Recipe }) {
