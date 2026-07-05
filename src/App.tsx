@@ -20,6 +20,7 @@ import {
   Image,
   Keyboard,
   Leaf,
+  Mic,
   NotebookPen,
   PackageCheck,
   PenLine,
@@ -38,8 +39,8 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-const PRODUCT_VERSION = "v0.2.2";
-const VERSION_NAME = "滑动仓库账本";
+const PRODUCT_VERSION = "v0.2.3";
+const VERSION_NAME = "识别入口";
 
 type View = "home" | "warehouse" | "recipes" | "diary";
 type UploadMethod = "photo" | "online" | "receipt" | "manual";
@@ -47,6 +48,8 @@ type StorageZone = "fridge" | "freezer" | "room" | "seasoning";
 type AmountMode = "count" | "weight";
 type Freshness = "fresh" | "good" | "soon" | "danger";
 type RecipeFilter = "all" | "favorite" | "cooked";
+type RecognitionStatus = "queued" | "selected" | "ignored";
+type RecipeInputMode = "photo" | "voice";
 
 type FoodInfo = {
   id: string;
@@ -113,6 +116,20 @@ type KitchenTool = {
   subtitle: string;
   tone: string;
   image: string;
+};
+
+type RecognizedFood = {
+  foodId: string;
+  confidence: number;
+  status: RecognitionStatus;
+};
+
+type RecipeInference = {
+  title: string;
+  confidence: number;
+  clues: string[];
+  flavor: string;
+  steps: string[];
 };
 
 const fallbackImage =
@@ -238,6 +255,24 @@ const foodLibrary: FoodInfo[] = [
   food("rice", "米饭", "粮油调味", "主食", "米饭", foodPhotos.rice, "room", ["室温", "当天食用"], 1, "count", 1, 250, "碗", 2.0, 116),
   food("soy", "生抽", "粮油调味", "调味", "生抽", foodPhotos.soy, "seasoning", ["避光", "避免潮湿"], 365, "count", 1, 500, "瓶", 12.0, 53),
 ];
+
+const recognitionPresets: Record<Exclude<UploadMethod, "manual">, Array<{ foodId: string; confidence: number }>> = {
+  photo: [
+    { foodId: "chickenWing", confidence: 92 },
+    { foodId: "pepper", confidence: 84 },
+    { foodId: "egg", confidence: 79 },
+  ],
+  online: [
+    { foodId: "peach", confidence: 91 },
+    { foodId: "yangmei", confidence: 88 },
+    { foodId: "lemon", confidence: 76 },
+  ],
+  receipt: [
+    { foodId: "eggplant", confidence: 89 },
+    { foodId: "pork", confidence: 83 },
+    { foodId: "soy", confidence: 71 },
+  ],
+};
 
 function food(
   id: string,
@@ -392,6 +427,7 @@ function App() {
   const [amount, setAmount] = useState(500);
   const [price, setPrice] = useState(18.9);
   const [note, setNote] = useState("冷冻分装");
+  const [recognizedFoods, setRecognizedFoods] = useState<RecognizedFood[]>([]);
   const [activeToolId, setActiveToolId] = useState("wok");
   const [favorites, setFavorites] = useState<string[]>(["eggplant-pork-rice"]);
   const [cookedIds, setCookedIds] = useState<string[]>(["pepper-egg"]);
@@ -448,25 +484,35 @@ function App() {
       setUploadOpen(false);
       setUploadClosing(false);
       setUploadDone(false);
+      setRecognizedFoods([]);
     }, 260);
   }
 
   function completeUpload() {
     setUploadDone(true);
     window.setTimeout(() => {
-      const nextItem: InventoryItem = {
-        ...selectedFood,
-        inventoryId: `${selectedFood.id}-${Date.now()}`,
-        amountMode,
-        amount,
-        pricePaid: price,
-        note,
-        addedDaysAgo: 0,
-        customTags: note ? [note] : [],
-      };
-      setInventory((current) => [nextItem, ...current]);
+      const timestamp = Date.now();
+      const foodIds = recognizedFoods.filter((item) => item.status !== "ignored").map((item) => item.foodId);
+      const targetFoodIds = foodIds.length ? foodIds : [selectedFood.id];
+      const nextItems = targetFoodIds
+        .map((foodId, index) => foodLibrary.find((item) => item.id === foodId) ?? selectedFood)
+        .map((foodInfo, index): InventoryItem => {
+          const isSelected = foodInfo.id === selectedFood.id;
+          return {
+            ...foodInfo,
+            inventoryId: `${foodInfo.id}-${timestamp}-${index}`,
+            amountMode: isSelected ? amountMode : foodInfo.defaultMode,
+            amount: isSelected ? amount : foodInfo.defaultMode === "count" ? foodInfo.defaultCount : foodInfo.defaultWeight,
+            pricePaid: isSelected ? price : foodInfo.price,
+            note: isSelected ? note : "AI识别待确认",
+            addedDaysAgo: 0,
+            customTags: isSelected ? (note ? [note] : []) : ["AI识别待确认"],
+          };
+        });
+      setInventory((current) => [...nextItems, ...current]);
       setUploadOpen(false);
       setUploadDone(false);
+      setRecognizedFoods([]);
       setView("warehouse");
     }, 560);
   }
@@ -609,6 +655,8 @@ function App() {
           setPrice={setPrice}
           note={note}
           setNote={setNote}
+          recognizedFoods={recognizedFoods}
+          setRecognizedFoods={setRecognizedFoods}
           onBack={closeUpload}
           onDone={completeUpload}
         />
@@ -695,6 +743,8 @@ function UploadSheet({
   setPrice,
   note,
   setNote,
+  recognizedFoods,
+  setRecognizedFoods,
   onBack,
   onDone,
 }: {
@@ -716,12 +766,48 @@ function UploadSheet({
   setPrice: (value: number) => void;
   note: string;
   setNote: (value: string) => void;
+  recognizedFoods: RecognizedFood[];
+  setRecognizedFoods: (value: RecognizedFood[]) => void;
   onBack: () => void;
   onDone: () => void;
 }) {
   const secondLevels = categoryTree.find((item) => item.level1 === level1)?.level2 ?? [];
   const visibleFoods = foodLibrary.filter((item) => item.level1 === level1 && item.level2 === level2);
   const isAiMethod = method !== "manual";
+
+  function chooseMethod(nextMethod: UploadMethod) {
+    setMethod(nextMethod);
+    setRecognizedFoods([]);
+  }
+
+  function runMockRecognition(nextMethod: Exclude<UploadMethod, "manual">) {
+    const nextFoods = recognitionPresets[nextMethod].map((item, index) => ({
+      ...item,
+      status: index === 0 ? "selected" as RecognitionStatus : "queued" as RecognitionStatus,
+    }));
+    setRecognizedFoods(nextFoods);
+    const firstFood = foodLibrary.find((item) => item.id === nextFoods[0]?.foodId);
+    if (firstFood) selectFood(firstFood.id);
+  }
+
+  function selectRecognizedFood(foodId: string) {
+    setRecognizedFoods(
+      recognizedFoods.map((item) => ({
+        ...item,
+        status: item.foodId === foodId ? "selected" : item.status === "selected" ? "queued" : item.status,
+      })),
+    );
+    selectFood(foodId);
+  }
+
+  function toggleRecognizedFood(foodId: string) {
+    setRecognizedFoods(
+      recognizedFoods.map((item) => {
+        if (item.foodId !== foodId) return item;
+        return { ...item, status: item.status === "ignored" ? "queued" : "ignored" };
+      }),
+    );
+  }
 
   return (
     <div className={`uploadOverlay ${closing ? "closing" : ""} ${done ? "done" : ""}`}>
@@ -742,7 +828,7 @@ function UploadSheet({
                     className={method === item.id ? "active" : ""}
                     key={item.id}
                     type="button"
-                    onClick={() => setMethod(item.id)}
+                    onClick={() => chooseMethod(item.id)}
                   >
                     <Icon size={20} />
                     <span>{item.label}</span>
@@ -753,13 +839,13 @@ function UploadSheet({
             </div>
 
             {isAiMethod && (
-              <div className="aiResult">
-                <Sparkles size={18} />
-                <div>
-                  <strong>AI 已预填：{selectedFood.name}</strong>
-                  <p>{methodText(method)}。你仍然可以手动矫正分类、数量、储存方式和价格。</p>
-                </div>
-              </div>
+              <AiUploadRecognizer
+                method={method}
+                recognizedFoods={recognizedFoods}
+                onUpload={() => runMockRecognition(method)}
+                onSelect={selectRecognizedFood}
+                onToggle={toggleRecognizedFood}
+              />
             )}
 
             <CategoryPicker
@@ -792,6 +878,74 @@ function UploadSheet({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function AiUploadRecognizer({
+  method,
+  recognizedFoods,
+  onUpload,
+  onSelect,
+  onToggle,
+}: {
+  method: UploadMethod;
+  recognizedFoods: RecognizedFood[];
+  onUpload: () => void;
+  onSelect: (foodId: string) => void;
+  onToggle: (foodId: string) => void;
+}) {
+  const accept = method === "receipt" ? "image/*,.pdf" : "image/*";
+  const handledCount = recognizedFoods.filter((item) => item.status !== "ignored").length;
+
+  return (
+    <div className="aiRecognizer">
+      <label className="uploadDrop">
+        <input type="file" accept={accept} onChange={onUpload} />
+        <span><Upload size={18} /> {uploadActionText(method)}</span>
+        <small>{methodText(method)}</small>
+      </label>
+
+      {recognizedFoods.length > 0 ? (
+        <div className="aiResult">
+          <Sparkles size={18} />
+          <div>
+            <strong>AI 识别到 {recognizedFoods.length} 个食材，准备处理 {handledCount} 个</strong>
+            <p>点击图片选择要校正的食材；右上角角标表示是否会加入仓库。</p>
+          </div>
+        </div>
+      ) : (
+        <div className="aiResult empty">
+          <Sparkles size={18} />
+          <div>
+            <strong>等待上传识别</strong>
+            <p>上传后会以图片队列展示识别结果，每个食材都可选择处理或跳过。</p>
+          </div>
+        </div>
+      )}
+
+      {recognizedFoods.length > 0 && (
+        <div className="recognizedFoodGrid">
+          {recognizedFoods.map((item) => {
+            const foodInfo = foodLibrary.find((food) => food.id === item.foodId);
+            if (!foodInfo) return null;
+
+            return (
+              <article className={`recognizedFoodCard ${item.status}`} key={item.foodId}>
+                <button className="recognizedFoodSelect" type="button" onClick={() => onSelect(item.foodId)}>
+                  <span className="cornerBadge">{recognitionStatusText(item.status)}</span>
+                  <FoodImage src={foodInfo.photo} alt={foodInfo.name} />
+                  <strong>{foodInfo.name}</strong>
+                  <small>{item.confidence}% 置信</small>
+                </button>
+                <button className="toggleRecognized" type="button" onClick={() => onToggle(item.foodId)}>
+                  {item.status === "ignored" ? "恢复处理" : "跳过"}
+                </button>
+              </article>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1090,6 +1244,77 @@ function ToolCarousel({ activeToolId, setActiveToolId }: { activeToolId: string;
   );
 }
 
+function RecipeReverseBox({
+  mode,
+  setMode,
+  description,
+  setDescription,
+  inference,
+  inferRecipe,
+}: {
+  mode: RecipeInputMode;
+  setMode: (mode: RecipeInputMode) => void;
+  description: string;
+  setDescription: (value: string) => void;
+  inference: RecipeInference | null;
+  inferRecipe: (mode: RecipeInputMode) => void;
+}) {
+  return (
+    <div className="recipeReverseBox">
+      <div className="sectionHeader compactHeader">
+        <div>
+          <p className="eyebrow">Reverse recipe</p>
+          <h2>拍照或语音反推做法</h2>
+        </div>
+      </div>
+      <div className="recipeInputModes">
+        <button className={mode === "photo" ? "active" : ""} type="button" onClick={() => setMode("photo")}>
+          <Camera size={17} /> 拍照识别
+        </button>
+        <button className={mode === "voice" ? "active" : ""} type="button" onClick={() => setMode("voice")}>
+          <Mic size={17} /> 语音描述
+        </button>
+      </div>
+
+      {mode === "photo" ? (
+        <label className="recipePhotoInput">
+          <input type="file" accept="image/*" onChange={() => inferRecipe("photo")} />
+          <span><Image size={18} /> 上传菜品照片</span>
+          <small>根据摆盘、颜色、酱汁状态和主料形态推测做法</small>
+        </label>
+      ) : (
+        <div className="recipeVoiceInput">
+          <button type="button" onClick={() => inferRecipe("voice")}><Mic size={17} /> 开始语音输入</button>
+          <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="说出菜名、口感、口味，例如：像糖醋排骨，外层发亮，软糯酸甜" />
+        </div>
+      )}
+
+      <button className="primaryButton inferButton" type="button" onClick={() => inferRecipe(mode)}>
+        <Sparkles size={16} /> 推测制作方式
+      </button>
+
+      {inference && (
+        <div className="recipeInferenceCard">
+          <div>
+            <span>{inference.confidence}%</span>
+            <small>推测置信</small>
+          </div>
+          <section>
+            <h3>{inference.title}</h3>
+            <p>{inference.flavor}</p>
+            <div className="recipeClues">
+              {inference.clues.map((clue) => <span key={clue}>{clue}</span>)}
+            </div>
+            <ol>
+              {inference.steps.map((step) => <li key={step}>{step}</li>)}
+            </ol>
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RecipesView({
   recipes,
   recipeFilter,
@@ -1113,6 +1338,27 @@ function RecipesView({
   toggleFavorite: (recipeId: string) => void;
   planToday: (recipe: Recipe, source: string) => void;
 }) {
+  const [recipeInputMode, setRecipeInputMode] = useState<RecipeInputMode>("photo");
+  const [recipeDescription, setRecipeDescription] = useState("菜名像糖醋排骨，外层有光泽，口感软糯，口味酸甜");
+  const [inference, setInference] = useState<RecipeInference | null>(null);
+
+  function inferRecipe(nextMode: RecipeInputMode) {
+    const lowerDescription = recipeDescription.toLowerCase();
+    const isBerry = recipeDescription.includes("杨梅") || lowerDescription.includes("berry");
+    const isSweetSour = recipeDescription.includes("酸甜") || recipeDescription.includes("糖醋");
+    const isCrispy = recipeDescription.includes("脆") || recipeDescription.includes("外酥");
+
+    setInference({
+      title: isBerry ? "杨梅糖醋小排风味做法" : isSweetSour ? "糖醋光泽类菜肴做法" : "家常复刻做法",
+      confidence: nextMode === "photo" ? 86 : 79,
+      clues: nextMode === "photo" ? ["颜色光泽", "酱汁挂壁", "块状主食材"] : ["菜名描述", "口感关键词", "口味关键词"],
+      flavor: isBerry ? "果酸、甜口、轻微酒香" : isSweetSour ? "酸甜、酱香、收汁浓" : isCrispy ? "外酥内嫩、咸鲜" : "家常平衡口",
+      steps: isBerry
+        ? ["主料先煎香或焯水去腥", "杨梅压汁后和糖、醋、生抽调成酸甜汁", "小火收汁到能挂勺", "出锅前补一点果肉或柠檬皮提香"]
+        : ["先判断主料是否需要焯水或煎香", "按酸甜或咸鲜方向配置基础酱汁", "中小火让酱汁包裹食材", "最后用高火收亮并试味微调"],
+    });
+  }
+
   return (
     <section>
       <div className="sectionHeader">
@@ -1122,6 +1368,14 @@ function RecipesView({
           <p className="pageSub">收藏、做过和全部菜谱分层筛选；后续继续打磨更多口味条件。</p>
         </div>
       </div>
+      <RecipeReverseBox
+        mode={recipeInputMode}
+        setMode={setRecipeInputMode}
+        description={recipeDescription}
+        setDescription={setRecipeDescription}
+        inference={inference}
+        inferRecipe={inferRecipe}
+      />
       <div className="filterBlock">
         <div className="railTags">
           {[
@@ -1401,6 +1655,23 @@ function methodText(method: UploadMethod) {
     receipt: "小票会解析购买日期、商品和总价",
     manual: "手动输入会根据食材库自动补全默认值",
   }[method];
+}
+
+function uploadActionText(method: UploadMethod) {
+  return {
+    photo: "上传或拍摄食材照片",
+    online: "上传线上购物截图",
+    receipt: "上传小票照片或 PDF",
+    manual: "手动输入食材",
+  }[method];
+}
+
+function recognitionStatusText(status: RecognitionStatus) {
+  return {
+    selected: "处理中",
+    queued: "待处理",
+    ignored: "跳过",
+  }[status];
 }
 
 export default App;

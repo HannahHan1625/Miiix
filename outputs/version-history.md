@@ -81,3 +81,21 @@ Product judgment:
 
 - Inventory browsing should use local horizontal scrolling for dense categories, not vertical card sprawl.
 - Diary is no longer a passive list; it becomes a behavioral ledger that can later support preference mining, waste tracking, and cooking frequency analysis.
+
+## v0.2.3 — 识别入口
+
+Date: 2026-07-05
+
+Scope:
+
+- Added real upload entry points for photo, online shopping screenshot, and receipt methods inside the unified ingredient upload sheet.
+- Replaced the single `AI prefilled` text line with a recognized ingredient image grid.
+- Each recognized ingredient now has a processing status badge, confidence, selectable image card, and ignore/restore control before saving.
+- Completion now saves all non-ignored recognized ingredients, while keeping the currently selected item editable.
+- Added photo and voice/text reverse-recipe entry in Recipes so users can infer a cooking method from dish image or sensory description.
+- Added a recipe inference result card with confidence, clues, flavor direction, and step summary.
+
+Product judgment:
+
+- v0.2.3 closes an important interaction gap: upload methods must look actionable before real AI/OCR is connected.
+- The current recognition is still mocked; the next quality gate is replacing presets with a real OCR/vision pipeline and persisting user corrections as training feedback.

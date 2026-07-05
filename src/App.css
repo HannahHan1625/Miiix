@@ -529,6 +529,133 @@ h2 {
   line-height: 1.48;
 }
 
+.aiRecognizer {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.uploadDrop,
+.recipePhotoInput {
+  min-height: 86px;
+  border: 1px dashed rgba(111, 159, 186, 0.48);
+  border-radius: 8px;
+  background: #f2f9fb;
+  color: var(--ink);
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  padding: 14px;
+  cursor: pointer;
+}
+
+.uploadDrop input,
+.recipePhotoInput input {
+  display: none;
+}
+
+.uploadDrop span,
+.recipePhotoInput span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 900;
+}
+
+.uploadDrop small,
+.recipePhotoInput small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.recognizedFoodGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.recognizedFoodCard {
+  min-width: 0;
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf5;
+  padding: 6px;
+}
+
+.recognizedFoodCard.ignored {
+  opacity: 0.54;
+}
+
+.recognizedFoodCard.selected {
+  border-color: rgba(111, 159, 186, 0.68);
+  background: #eaf7fb;
+}
+
+.recognizedFoodSelect {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  padding: 0;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.recognizedFoodSelect .foodPhoto {
+  width: 68px;
+  height: 60px;
+}
+
+.recognizedFoodSelect strong,
+.recognizedFoodSelect small {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recognizedFoodSelect small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.cornerBadge {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  z-index: 1;
+  min-height: 20px;
+  border-radius: 999px;
+  background: var(--yellow);
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.recognizedFoodCard.ignored .cornerBadge {
+  background: #e4e1d7;
+  color: var(--muted);
+}
+
+.toggleRecognized {
+  width: 100%;
+  min-height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff9dc;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 850;
+  margin-top: 6px;
+}
+
 .categoryBlock,
 .foodEditor {
   border: 1px solid var(--line);
@@ -746,6 +873,138 @@ input[type="range"] {
 
 .filterBlock {
   margin-bottom: 16px;
+}
+
+.recipeReverseBox {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 253, 245, 0.84);
+  padding: 14px;
+  margin-bottom: 16px;
+}
+
+.recipeInputModes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.recipeInputModes button {
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf5;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-weight: 850;
+}
+
+.recipeInputModes button.active {
+  background: #f7df85;
+}
+
+.recipeVoiceInput {
+  display: grid;
+  gap: 8px;
+}
+
+.recipeVoiceInput button {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #edf8fc;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-weight: 850;
+}
+
+.recipeVoiceInput textarea {
+  width: 100%;
+  min-height: 96px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdf5;
+  color: var(--ink);
+  padding: 10px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.inferButton {
+  width: 100%;
+  margin-top: 10px;
+}
+
+.recipeInferenceCard {
+  border: 1px solid rgba(111, 159, 186, 0.32);
+  border-radius: 8px;
+  background: #f2f9fb;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  margin-top: 10px;
+}
+
+.recipeInferenceCard > div {
+  min-height: 72px;
+  border-radius: 8px;
+  background: #fffdf5;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  text-align: center;
+}
+
+.recipeInferenceCard > div span {
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.recipeInferenceCard > div small,
+.recipeInferenceCard p {
+  color: var(--muted);
+}
+
+.recipeInferenceCard section {
+  min-width: 0;
+}
+
+.recipeInferenceCard h3 {
+  margin: 0 0 6px;
+}
+
+.recipeClues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.recipeClues span {
+  min-height: 24px;
+  border-radius: 999px;
+  background: #fff9dc;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.recipeInferenceCard ol {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--ink);
+  line-height: 1.6;
 }
 
 .recipeGrid {
