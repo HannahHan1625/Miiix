@@ -195,3 +195,22 @@ Product judgment:
 - The Warehouse canvas is for composing ingredients and tools; the generated recommendation is a page-level decision moment.
 - A centered result layer makes the recommendation feel intentional and prevents the user from reading it as another object inside the canvas.
 - The next quality gate is adding recommendation explanation inside or adjacent to this result layer without making the card feel crowded.
+
+## v0.3.5 — 完整推荐卡
+
+Date: 2026-07-06
+
+Scope:
+
+- Fixed the recommendation card height problem where the tutorial side clipped its bottom action buttons.
+- Split both recommendation card faces into a scrollable content body and a persistent action area.
+- Increased the centered modal card's usable mobile height while keeping it constrained inside the viewport.
+- Kept the page-level centered popup behavior from v0.3.4.
+- Verified at a 390 x 844 mobile viewport that the flipped tutorial card is centered, fully contained, and has no page overflow.
+- Verified `加入今天` remains a valid click target after the card flips.
+
+Product judgment:
+
+- A recipe card is a decision surface, so its primary actions cannot depend on content length.
+- The tutorial side needs a fixed interaction floor: instructions may grow, but `返回卡片` and `加入今天` must remain visible and clickable.
+- The next quality gate is recommendation explanation and persistence, not more visual tuning on this card.

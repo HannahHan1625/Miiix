@@ -39,8 +39,8 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-const PRODUCT_VERSION = "v0.3.4";
-const VERSION_NAME = "居中推荐弹窗";
+const PRODUCT_VERSION = "v0.3.5";
+const VERSION_NAME = "完整推荐卡";
 
 type View = "home" | "warehouse" | "recipes" | "diary";
 type UploadMethod = "photo" | "online" | "receipt" | "manual";
@@ -1379,66 +1379,70 @@ function FusionResultPopup({
           <X size={17} />
         </button>
         <div className={`fusionResultCard ${flipped ? "flipped" : ""}`}>
-        <div className="fusionResultInner">
-          <article className="fusionResultFace resultFront">
-            <div className="resultKicker"><Sparkles size={15} /> 今日最推荐</div>
-            <div className="dishHero">
-              <img className="dishCutout" src={recipe.image} alt={recipe.title} onError={(event) => { event.currentTarget.src = fallbackImage; }} />
-              <div>
-                <h2>{recipe.title}</h2>
-                <p>{recipe.reason}</p>
+          <div className="fusionResultInner">
+            <article className="fusionResultFace resultFront">
+              <div className="resultCardBody">
+                <div className="resultKicker"><Sparkles size={15} /> 今日最推荐</div>
+                <div className="dishHero">
+                  <img className="dishCutout" src={recipe.image} alt={recipe.title} onError={(event) => { event.currentTarget.src = fallbackImage; }} />
+                  <div>
+                    <h2>{recipe.title}</h2>
+                    <p>{recipe.reason}</p>
+                  </div>
+                </div>
+                <RecipeMeta recipe={recipe} />
+                <div className="fusionNeedGrid">
+                  <div>
+                    <span>需要食材</span>
+                    <strong>{ingredients.join("、") || "当前已选食材"}</strong>
+                  </div>
+                  <div>
+                    <span>调味料</span>
+                    <strong>{seasonings.join("、") || "按口味微调"}</strong>
+                  </div>
+                </div>
               </div>
-            </div>
-            <RecipeMeta recipe={recipe} />
-            <div className="fusionNeedGrid">
-              <div>
-                <span>需要食材</span>
-                <strong>{ingredients.join("、") || "当前已选食材"}</strong>
+              <div className="resultActions">
+                <button className={`ghostButton favoriteAction ${favorite ? "active" : ""}`} type="button" onClick={onFavorite}>
+                  {favorite ? <BookmarkCheck size={16} /> : <Bookmark size={16} />} 收藏
+                </button>
+                <button className="primaryButton" type="button" onClick={onMake}>
+                  <ChefHat size={16} /> 制作
+                </button>
               </div>
-              <div>
-                <span>调味料</span>
-                <strong>{seasonings.join("、") || "按口味微调"}</strong>
-              </div>
-            </div>
-            <div className="resultActions">
-              <button className={`ghostButton favoriteAction ${favorite ? "active" : ""}`} type="button" onClick={onFavorite}>
-                {favorite ? <BookmarkCheck size={16} /> : <Bookmark size={16} />} 收藏
-              </button>
-              <button className="primaryButton" type="button" onClick={onMake}>
-                <ChefHat size={16} /> 制作
-              </button>
-            </div>
-          </article>
+            </article>
 
-          <article className="fusionResultFace resultBack">
-            <div className="resultKicker"><ClipboardList size={15} /> 制作教程</div>
-            <h2>{recipe.title}</h2>
-            <div className="tutorialSummary">
-              <span>{selectedTool.name}</span>
-              <span>{selectedPreference.label}</span>
-              <span>{recipe.minutes} 分钟</span>
-            </div>
-            <div className="fusionNeedGrid tutorial">
-              <div>
-                <span>菜系</span>
-                <strong>{recipe.cuisine}</strong>
+            <article className="fusionResultFace resultBack">
+              <div className="resultCardBody">
+                <div className="resultKicker"><ClipboardList size={15} /> 制作教程</div>
+                <h2>{recipe.title}</h2>
+                <div className="tutorialSummary">
+                  <span>{selectedTool.name}</span>
+                  <span>{selectedPreference.label}</span>
+                  <span>{recipe.minutes} 分钟</span>
+                </div>
+                <div className="fusionNeedGrid tutorial">
+                  <div>
+                    <span>菜系</span>
+                    <strong>{recipe.cuisine}</strong>
+                  </div>
+                  <div>
+                    <span>卡路里</span>
+                    <strong>{recipe.calories} kcal</strong>
+                  </div>
+                </div>
+                <ol className="tutorialSteps">
+                  {recipe.steps.map((step) => <li key={step}>{step}</li>)}
+                </ol>
               </div>
-              <div>
-                <span>卡路里</span>
-                <strong>{recipe.calories} kcal</strong>
+              <div className="resultActions">
+                <button className="ghostButton" type="button" onClick={onBack}>返回卡片</button>
+                <button className="primaryButton" type="button" onClick={onPlanToday}>
+                  <NotebookPen size={16} /> 加入今天
+                </button>
               </div>
-            </div>
-            <ol className="tutorialSteps">
-              {recipe.steps.map((step) => <li key={step}>{step}</li>)}
-            </ol>
-            <div className="resultActions">
-              <button className="ghostButton" type="button" onClick={onBack}>返回卡片</button>
-              <button className="primaryButton" type="button" onClick={onPlanToday}>
-                <NotebookPen size={16} /> 加入今天
-              </button>
-            </div>
-          </article>
-        </div>
+            </article>
+          </div>
         </div>
       </div>
     </div>

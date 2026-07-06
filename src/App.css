@@ -1953,8 +1953,9 @@ h2 {
 
 .fusionResultDock {
   position: relative;
-  width: min(100%, 402px);
+  width: min(calc(100% - 10px), 402px);
   min-width: 0;
+  max-height: calc(100dvh - 42px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   perspective: 1200px;
   animation: resultPopCentered 520ms cubic-bezier(0.18, 0.92, 0.22, 1) both;
 }
@@ -2020,13 +2021,15 @@ h2 {
 
 .fusionResultCard {
   position: relative;
-  min-height: clamp(308px, 44dvh, 360px);
+  height: clamp(500px, 76dvh, 620px);
+  max-height: calc(100dvh - 42px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   transform-style: preserve-3d;
 }
 
 .fusionResultInner {
   position: relative;
-  min-height: clamp(308px, 44dvh, 360px);
+  height: 100%;
+  min-height: 0;
   transform-style: preserve-3d;
   transition: transform 520ms cubic-bezier(0.2, 0.88, 0.24, 1);
 }
@@ -2044,8 +2047,24 @@ h2 {
   background: rgba(255, 253, 245, 0.97);
   box-shadow: 0 24px 52px rgba(39, 49, 58, 0.16);
   backface-visibility: hidden;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
   overflow: hidden;
-  padding: 13px;
+  padding: 16px 14px 14px;
+}
+
+.resultCardBody {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+  scrollbar-width: none;
+}
+
+.resultCardBody::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .resultFront {
@@ -2152,7 +2171,13 @@ h2 {
   display: grid;
   grid-template-columns: 1fr 1.2fr;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 0;
+}
+
+.resultActions .primaryButton,
+.resultActions .ghostButton {
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .favoriteAction.active {
@@ -2185,7 +2210,6 @@ h2 {
 }
 
 .tutorialSteps {
-  min-height: 108px;
   margin: 0;
   padding-left: 20px;
   color: var(--ink);
