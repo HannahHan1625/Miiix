@@ -214,3 +214,25 @@ Product judgment:
 - A recipe card is a decision surface, so its primary actions cannot depend on content length.
 - The tutorial side needs a fixed interaction floor: instructions may grow, but `返回卡片` and `加入今天` must remain visible and clickable.
 - The next quality gate is recommendation explanation and persistence, not more visual tuning on this card.
+
+## v0.3.6 — 菜谱生命周期
+
+Date: 2026-07-10
+
+Scope:
+
+- Reworked the fusion result flow from a two-action card into a recipe lifecycle.
+- Split the generated dish meaning into candidate recipe, saved recipe, today's meal plan, and cooked diary record.
+- Changed the fusion recommendation card primary action to `今天做`.
+- Changed `制作` into `看做法`, so viewing the tutorial no longer implies the user already cooked the dish.
+- Added `再融合` directly on the recommendation card.
+- Made favoriting a generated fusion recipe save the full recipe object so it can appear in Recipes.
+- Changed `planToday` so it creates today's plan and shopping list only; it no longer writes a cooked diary record.
+- Added a Today Plan panel in Diary with `开始制作`, step expansion, and `完成制作`.
+- Changed the diary write to happen only after `完成制作`.
+
+Product judgment:
+
+- The previous flow overloaded one `Recipe` object with four meanings: generated candidate, favorite, plan, and cooked record.
+- The corrected lifecycle makes the user's commitment explicit: first decide, then plan, then cook, then record.
+- The next quality gate is persistence, because this lifecycle now creates more meaningful state that must survive refresh.

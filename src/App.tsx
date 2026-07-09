@@ -7,7 +7,6 @@ import {
   CalendarDays,
   Carrot,
   Check,
-  ChefHat,
   ChevronLeft,
   CircleDollarSign,
   ClipboardList,
@@ -39,8 +38,8 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-const PRODUCT_VERSION = "v0.3.5";
-const VERSION_NAME = "完整推荐卡";
+const PRODUCT_VERSION = "v0.3.6";
+const VERSION_NAME = "菜谱生命周期";
 
 type View = "home" | "warehouse" | "recipes" | "diary";
 type UploadMethod = "photo" | "online" | "receipt" | "manual";
@@ -109,6 +108,13 @@ type ShoppingLine = {
   name: string;
   reason: string;
   owned: boolean;
+};
+
+type MealPlan = {
+  id: string;
+  recipe: Recipe;
+  source: string;
+  plannedDateISO: string;
 };
 
 type KitchenTool = {
@@ -499,10 +505,12 @@ function App() {
   const [note, setNote] = useState("冷冻分装");
   const [recognizedFoods, setRecognizedFoods] = useState<RecognizedFood[]>([]);
   const [activeToolId, setActiveToolId] = useState("wok");
+  const [savedRecipes, setSavedRecipes] = useState<Recipe[]>([]);
   const [favorites, setFavorites] = useState<string[]>(["eggplant-pork-rice"]);
   const [cookedIds, setCookedIds] = useState<string[]>(["pepper-egg"]);
   const [recipeFilter, setRecipeFilter] = useState<RecipeFilter>("all");
   const [cuisineFilter, setCuisineFilter] = useState("全部");
+  const [todayPlan, setTodayPlan] = useState<MealPlan | null>(null);
   const [shoppingList, setShoppingList] = useState<ShoppingLine[]>([]);
   const [diary, setDiary] = useState<DiaryEntry[]>([
     {
@@ -518,6 +526,11 @@ function App() {
 
   const selectedFood = foodLibrary.find((item) => item.id === selectedFoodId) ?? foodLibrary[0];
   const selectedTool = kitchenTools.find((tool) => tool.id === activeToolId) ?? kitchenTools[0];
+  const recipeCatalog = useMemo(() => {
+    const catalog = new Map<string, Recipe>();
+    [...recipesSeed, ...savedRecipes].forEach((recipe) => catalog.set(recipe.id, recipe));
+    return Array.from(catalog.values());
+  }, [savedRecipes]);
 
   const stats = useMemo(() => {
     const storedScore = Math.min(100, Math.round((inventory.length / 14) * 100));
@@ -531,7 +544,7 @@ function App() {
     return { storedScore, cookFrequency, cookedCount, freshnessScore, total, persona };
   }, [cookedIds.length, diary.length, inventory]);
 
-  const filteredRecipes = recipesSeed.filter((recipe) => {
+  const filteredRecipes = recipeCatalog.filter((recipe) => {
     const byMode =
       recipeFilter === "all" ||
       (recipeFilter === "favorite" && favorites.includes(recipe.id)) ||
@@ -540,7 +553,7 @@ function App() {
     return byMode && byCuisine;
   });
 
-  const cuisineOptions = ["全部", ...Array.from(new Set(recipesSeed.map((recipe) => recipe.cuisine)))];
+  const cuisineOptions = ["全部", ...Array.from(new Set(recipeCatalog.map((recipe) => recipe.cuisine)))];
 
   function openUpload() {
     setUploadOpen(true);
@@ -611,26 +624,49 @@ function App() {
     if (nextFood) selectFood(nextFood.id);
   }
 
-  function toggleFavorite(recipeId: string) {
+  function rememberRecipe(recipe: Recipe) {
+    if (recipesSeed.some((item) => item.id === recipe.id)) return;
+    setSavedRecipes((current) => (current.some((item) => item.id === recipe.id) ? current : [recipe, ...current]));
+  }
+
+  function toolNameForRecipe(recipe: Recipe) {
+    return kitchenTools.find((tool) => tool.id === recipe.toolId)?.name ?? selectedTool.name;
+  }
+
+  function toggleFavorite(recipe: Recipe) {
+    if (!favorites.includes(recipe.id)) rememberRecipe(recipe);
     setFavorites((current) =>
-      current.includes(recipeId) ? current.filter((id) => id !== recipeId) : [recipeId, ...current],
+      current.includes(recipe.id) ? current.filter((id) => id !== recipe.id) : [recipe.id, ...current],
     );
   }
 
   function planToday(recipe: Recipe, source: string) {
+    rememberRecipe(recipe);
     const ownedNames = new Set(inventory.map((item) => item.name));
+    const timestamp = Date.now();
     const lines = recipe.required.map((name) => ({
-      id: `${recipe.id}-${name}-${Date.now()}`,
+      id: `${recipe.id}-${name}-${timestamp}`,
       name,
-      reason: `今天吃《${recipe.title}》`,
+      reason: `准备做《${recipe.title}》`,
       owned: ownedNames.has(name),
     }));
     const missingLines = lines.filter((line) => !line.owned);
+    setTodayPlan({
+      id: `${recipe.id}-plan-${timestamp}`,
+      recipe,
+      source,
+      plannedDateISO: todayISO(),
+    });
     setShoppingList(
       missingLines.length
         ? missingLines
-        : [{ id: `${recipe.id}-covered-${Date.now()}`, name: "库存已覆盖全部食材", reason: `《${recipe.title}》无需额外采购`, owned: false }],
+        : [{ id: `${recipe.id}-covered-${timestamp}`, name: "库存已覆盖全部食材", reason: `《${recipe.title}》无需额外采购`, owned: false }],
     );
+    setView("diary");
+  }
+
+  function completeCooking(recipe: Recipe, source: string) {
+    rememberRecipe(recipe);
     setDiary((current) => [
       {
         id: `${recipe.id}-${Date.now()}`,
@@ -638,12 +674,13 @@ function App() {
         date: "今天",
         dateISO: todayISO(),
         source,
-        note: `由 ${source} 加入今日计划；缺口食材已自动减去库存。`,
-        tags: [recipe.cuisine, recipe.difficulty, selectedTool.name],
+        note: `由 ${source} 完成制作；这条记录会进入后续口味偏好学习。`,
+        tags: [recipe.cuisine, recipe.difficulty, toolNameForRecipe(recipe)],
       },
       ...current,
     ]);
     setCookedIds((current) => (current.includes(recipe.id) ? current : [recipe.id, ...current]));
+    setTodayPlan((current) => (current?.recipe.id === recipe.id ? null : current));
     setView("diary");
   }
 
@@ -695,7 +732,7 @@ function App() {
               planToday={planToday}
             />
           )}
-          {view === "diary" && <DiaryView diary={diary} shoppingList={shoppingList} inventory={inventory} />}
+          {view === "diary" && <DiaryView diary={diary} shoppingList={shoppingList} inventory={inventory} todayPlan={todayPlan} completeCooking={completeCooking} />}
         </main>
 
         <nav className="bottomNav" aria-label="主导航">
@@ -1141,7 +1178,7 @@ function WarehouseView({
   activeToolId: string;
   setActiveToolId: (id: string) => void;
   favorites: string[];
-  toggleFavorite: (recipeId: string) => void;
+  toggleFavorite: (recipe: Recipe) => void;
   shoppingList: ShoppingLine[];
   planToday: (recipe: Recipe, source: string) => void;
 }) {
@@ -1236,9 +1273,10 @@ function WarehouseView({
             selectedPreference={selectedPreference}
             flipped={recipeFlipped}
             favorite={favorites.includes(fusionRecipe.id)}
-            onFavorite={() => toggleFavorite(fusionRecipe.id)}
-            onMake={() => setRecipeFlipped(true)}
+            onFavorite={() => toggleFavorite(fusionRecipe)}
+            onViewSteps={() => setRecipeFlipped(true)}
             onBack={() => setRecipeFlipped(false)}
+            onRemix={fuseNow}
             onDismiss={() => {
               setFusionCount(0);
               setRecipeFlipped(false);
@@ -1347,8 +1385,9 @@ function FusionResultPopup({
   flipped,
   favorite,
   onFavorite,
-  onMake,
+  onViewSteps,
   onBack,
+  onRemix,
   onDismiss,
   onPlanToday,
 }: {
@@ -1358,8 +1397,9 @@ function FusionResultPopup({
   flipped: boolean;
   favorite: boolean;
   onFavorite: () => void;
-  onMake: () => void;
+  onViewSteps: () => void;
   onBack: () => void;
+  onRemix: () => void;
   onDismiss: () => void;
   onPlanToday: () => void;
 }) {
@@ -1402,12 +1442,18 @@ function FusionResultPopup({
                   </div>
                 </div>
               </div>
-              <div className="resultActions">
-                <button className={`ghostButton favoriteAction ${favorite ? "active" : ""}`} type="button" onClick={onFavorite}>
-                  {favorite ? <BookmarkCheck size={16} /> : <Bookmark size={16} />} 收藏
+              <div className="resultActions resultDecisionActions">
+                <button className="primaryButton wideAction" type="button" onClick={onPlanToday}>
+                  <NotebookPen size={16} /> 今天做
                 </button>
-                <button className="primaryButton" type="button" onClick={onMake}>
-                  <ChefHat size={16} /> 制作
+                <button className={`ghostButton favoriteAction ${favorite ? "active" : ""}`} type="button" onClick={onFavorite}>
+                  {favorite ? <BookmarkCheck size={16} /> : <Bookmark size={16} />} {favorite ? "已收藏" : "收藏"}
+                </button>
+                <button className="ghostButton" type="button" onClick={onViewSteps}>
+                  <ClipboardList size={16} /> 看做法
+                </button>
+                <button className="ghostButton" type="button" onClick={onRemix}>
+                  <Sparkles size={16} /> 再融合
                 </button>
               </div>
             </article>
@@ -1436,9 +1482,9 @@ function FusionResultPopup({
                 </ol>
               </div>
               <div className="resultActions">
-                <button className="ghostButton" type="button" onClick={onBack}>返回卡片</button>
+                <button className="ghostButton" type="button" onClick={onBack}>返回推荐</button>
                 <button className="primaryButton" type="button" onClick={onPlanToday}>
-                  <NotebookPen size={16} /> 加入今天
+                  <NotebookPen size={16} /> 今天做
                 </button>
               </div>
             </article>
@@ -1770,7 +1816,7 @@ function RecipesView({
   cuisineOptions: string[];
   favorites: string[];
   cookedIds: string[];
-  toggleFavorite: (recipeId: string) => void;
+  toggleFavorite: (recipe: Recipe) => void;
   planToday: (recipe: Recipe, source: string) => void;
 }) {
   const [recipeInputMode, setRecipeInputMode] = useState<RecipeInputMode>("photo");
@@ -1834,7 +1880,7 @@ function RecipesView({
       <div className="recipeGrid">
         {recipes.map((recipe) => (
           <article className="recipeCard" key={recipe.id}>
-            <button className="favoriteButton" type="button" onClick={() => toggleFavorite(recipe.id)} aria-label="收藏菜谱">
+            <button className="favoriteButton" type="button" onClick={() => toggleFavorite(recipe)} aria-label="收藏菜谱">
               {favorites.includes(recipe.id) ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
             </button>
             <img src={recipe.image} alt={recipe.title} onError={(event) => { event.currentTarget.src = fallbackImage; }} />
@@ -1845,7 +1891,7 @@ function RecipesView({
             <div className="cardActions">
               <span>{cookedIds.includes(recipe.id) ? "做过" : "未做"}</span>
               <button className="primaryButton" type="button" onClick={() => planToday(recipe, "菜谱选择")}>
-                今天吃什么
+                今天做
               </button>
             </div>
           </article>
@@ -1894,8 +1940,75 @@ function inventoryDate(item: InventoryItem) {
   return dateByDaysAgo(item.addedDaysAgo);
 }
 
-function DiaryView({ diary, shoppingList, inventory }: { diary: DiaryEntry[]; shoppingList: ShoppingLine[]; inventory: InventoryItem[] }) {
+function TodayPlanPanel({
+  plan,
+  shoppingList,
+  expanded,
+  setExpanded,
+  completeCooking,
+}: {
+  plan: MealPlan;
+  shoppingList: ShoppingLine[];
+  expanded: boolean;
+  setExpanded: (value: boolean) => void;
+  completeCooking: (recipe: Recipe, source: string) => void;
+}) {
+  const mainIngredients = recipeMainIngredients(plan.recipe);
+  const missingCount = shoppingList.filter((line) => !line.owned && line.name !== "库存已覆盖全部食材").length;
+
+  return (
+    <article className="todayPlanCard">
+      <div className="todayPlanHeader">
+        <div>
+          <p className="eyebrow">Today's plan</p>
+          <h2>{plan.recipe.title}</h2>
+          <span>来自 {plan.source} · {plan.recipe.minutes} 分钟 · {plan.recipe.difficulty}</span>
+        </div>
+        <img src={plan.recipe.image} alt={plan.recipe.title} onError={(event) => { event.currentTarget.src = fallbackImage; }} />
+      </div>
+      <div className="todayPlanMeta">
+        <div>
+          <span>计划状态</span>
+          <strong>{expanded ? "制作中" : "准备做"}</strong>
+        </div>
+        <div>
+          <span>采购缺口</span>
+          <strong>{missingCount > 0 ? `${missingCount} 项` : "库存够用"}</strong>
+        </div>
+      </div>
+      <div className="needLine planNeedLine"><Utensils size={15} /> 食材：{mainIngredients.join("、") || "当前库存食材"}</div>
+      {expanded && (
+        <ol className="todaySteps">
+          {plan.recipe.steps.map((step) => <li key={step}>{step}</li>)}
+        </ol>
+      )}
+      <div className="todayPlanActions">
+        <button className="ghostButton" type="button" onClick={() => setExpanded(!expanded)}>
+          <ClipboardList size={16} /> {expanded ? "收起步骤" : "开始制作"}
+        </button>
+        <button className="primaryButton" type="button" onClick={() => completeCooking(plan.recipe, plan.source)}>
+          <Check size={16} /> 完成制作
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function DiaryView({
+  diary,
+  shoppingList,
+  inventory,
+  todayPlan,
+  completeCooking,
+}: {
+  diary: DiaryEntry[];
+  shoppingList: ShoppingLine[];
+  inventory: InventoryItem[];
+  todayPlan: MealPlan | null;
+  completeCooking: (recipe: Recipe, source: string) => void;
+}) {
   const [selectedDate, setSelectedDate] = useState(todayISO());
+  const [planExpanded, setPlanExpanded] = useState(false);
   const preference = diary.length > 2 ? "偏好快手家常与低洗碗路径" : "偏好信号正在积累";
   const calendarDays = calendarDatesFor(selectedDate);
   const monthlyIncome = inventory.filter((item) => sameMonth(inventoryDate(item), selectedDate));
@@ -1926,6 +2039,15 @@ function DiaryView({ diary, shoppingList, inventory }: { diary: DiaryEntry[]; sh
           <p>入库和做菜记录会逐步形成你的口味画像。</p>
         </div>
       </div>
+      {todayPlan && (
+        <TodayPlanPanel
+          plan={todayPlan}
+          shoppingList={shoppingList}
+          expanded={planExpanded}
+          setExpanded={setPlanExpanded}
+          completeCooking={completeCooking}
+        />
+      )}
       <div className="ledgerSummary">
         <div>
           <span>本月入库</span>
