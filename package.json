@@ -1,11 +1,12 @@
 {
   "name": "miiix-fridge-fusion",
-  "version": "0.3.7",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc && vite build",
+    "check:migrations": "node scripts/check-migrations.mjs",
     "preview": "vite preview --host 127.0.0.1",
     "ios:sync": "pnpm run build && cap sync ios",
     "ios:open": "pnpm run ios:sync && cap open ios",

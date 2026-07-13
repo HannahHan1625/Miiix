@@ -255,3 +255,26 @@ Product judgment:
 - This is a PATCH release because it changes internal structure without adding a user-facing workflow.
 - The split creates a controlled boundary for persistence: v0.4.0 can store and restore domain state without coupling storage code to page components.
 - New visual features remain paused until inventory, favorites, plans, and diary records survive refresh.
+
+## v0.4.0 — 数据地基
+
+Date: 2026-07-13
+
+Scope:
+
+- Added a versioned Supabase PostgreSQL schema across four ordered migrations.
+- Separated canonical ingredients from user inventory lots and inventory transactions.
+- Added normalized aliases, hierarchical categories, storage profiles, unit conversions, nutrition, and licensed image-asset metadata.
+- Replaced string-only recipe assumptions at the persistence boundary with structured recipe ingredients, quantities, units, roles, steps, and tools.
+- Added recognition review, meal plan, shopping list, cooking session, favorite, preference, and user-event persistence models.
+- Added Epicure/external vocabulary mappings, versioned embedding metadata, recommendation runs, candidate score evidence, and user feedback records.
+- Added Supabase row-level security so global catalog data is client-readable while private user data is owner-scoped.
+- Added atomic inventory transactions with idempotency keys so retries cannot deduct the same stock twice.
+- Added TypeScript Repository contracts so product features can use one data interface regardless of whether the implementation is memory, IndexedDB, or Supabase.
+- Added an automated migration-order check.
+
+Product judgment:
+
+- This version defines the data contract; it does not claim that a live database or real AI pipeline is connected.
+- The next quality gate is a Supabase Repository adapter plus a reviewed seed catalog for the first 200 high-frequency household ingredients.
+- UI work remains secondary until inventory and recipe lifecycle data persist through reload.

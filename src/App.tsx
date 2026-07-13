@@ -38,8 +38,8 @@ import { WarehouseView } from "./features/fusion/WarehouseView";
 import { RecipesView } from "./features/recipes/RecipesView";
 import { DiaryView } from "./features/diary/DiaryView";
 
-const PRODUCT_VERSION = "v0.3.7";
-const VERSION_NAME = "领域模型拆分";
+const PRODUCT_VERSION = "v0.4.0";
+const VERSION_NAME = "数据地基";
 
 const personaLibrary = [
   { name: "晨光冰箱长", min: 76, desc: "库存结构清楚，做饭节奏稳定，适合开始养成自己的菜谱库。" },
