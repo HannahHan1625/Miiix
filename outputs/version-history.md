@@ -236,3 +236,22 @@ Product judgment:
 - The previous flow overloaded one `Recipe` object with four meanings: generated candidate, favorite, plan, and cooked record.
 - The corrected lifecycle makes the user's commitment explicit: first decide, then plan, then cook, then record.
 - The next quality gate is persistence, because this lifecycle now creates more meaningful state that must survive refresh.
+
+## v0.3.7 — 领域模型拆分
+
+Date: 2026-07-12
+
+Scope:
+
+- Split the 2,244-line `App.tsx` into app orchestration, shared UI, static catalog data, and five feature modules.
+- Added four explicit domain models: inventory, recipe, meal plan, and diary.
+- Moved freshness, ingredient formatting, recipe ingredient classification, shopping-list generation, calendar logic, and diary-entry creation into pure domain functions.
+- Reduced `App.tsx` to the global state and page-composition layer.
+- Removed inactive warehouse-management components left behind by the fusion-workbench redesign.
+- Preserved the existing user-facing workflow and visual behavior.
+
+Product judgment:
+
+- This is a PATCH release because it changes internal structure without adding a user-facing workflow.
+- The split creates a controlled boundary for persistence: v0.4.0 can store and restore domain state without coupling storage code to page components.
+- New visual features remain paused until inventory, favorites, plans, and diary records survive refresh.
