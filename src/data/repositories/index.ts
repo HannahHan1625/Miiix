@@ -18,5 +18,6 @@ export type {
   RecommendationRepository,
   RepositoryProvider,
   SaveRecipeInput,
+  ShoppingListBundle,
   UpdateInventoryLotInput,
 } from "./contracts";

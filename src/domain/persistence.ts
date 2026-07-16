@@ -145,6 +145,7 @@ export type RecipeDocument = {
   imageUri: string | null;
   sourceType: "curated" | "generated" | "imported";
   status: "draft" | "published" | "archived";
+  metadata: Record<string, JsonValue>;
   createdAt: ISODateTime;
   updatedAt: ISODateTime;
 };
@@ -240,6 +241,7 @@ export type MealPlanRecord = {
   source: string;
   status: "planned" | "cooking" | "completed" | "cancelled";
   recipeIds: EntityId[];
+  metadata: Record<string, JsonValue>;
   createdAt: ISODateTime;
   updatedAt: ISODateTime;
 };
@@ -270,6 +272,7 @@ export type CookingSessionRecord = {
   userId: EntityId;
   recipeId: EntityId;
   mealPlanItemId: EntityId | null;
+  idempotencyKey: string;
   status: "started" | "completed" | "abandoned";
   startedAt: ISODateTime;
   completedAt: ISODateTime | null;

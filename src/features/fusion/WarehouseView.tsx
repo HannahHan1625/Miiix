@@ -39,7 +39,7 @@ export function WarehouseView({
   favorites: string[];
   toggleFavorite: (recipe: Recipe) => void;
   shoppingList: ShoppingLine[];
-  planToday: (recipe: Recipe, source: string) => void;
+  planToday: (recipe: Recipe, source: string, selectedInventoryIds?: string[]) => void;
 }) {
   const [selectedInventoryIds, setSelectedInventoryIds] = useState<string[]>([]);
   const [activeTray, setActiveTray] = useState<FusionTray>("ingredients");
@@ -140,7 +140,7 @@ export function WarehouseView({
               setFusionCount(0);
               setRecipeFlipped(false);
             }}
-            onPlanToday={() => planToday(fusionRecipe, "仓库融合")}
+            onPlanToday={() => planToday(fusionRecipe, "仓库融合", selectedInventoryIds)}
           />
         )}
       </div>
@@ -446,5 +446,4 @@ function orbitStyle(index: number, total: number): CSSProperties {
     "--y": `${Math.sin(angle) * radiusY}px`,
   } as CSSProperties;
 }
-
 

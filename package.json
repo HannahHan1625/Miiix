@@ -1,11 +1,13 @@
 {
   "name": "miiix-fridge-fusion",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "check:migrations": "node scripts/check-migrations.mjs",
     "preview": "vite preview --host 127.0.0.1",
     "ios:sync": "pnpm run build && cap sync ios",
@@ -17,6 +19,7 @@
     "@capacitor/core": "^8.4.1",
     "@capacitor/ios": "^8.4.1",
     "@vitejs/plugin-react": "^5.0.0",
+    "idb": "^8.0.3",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -25,6 +28,8 @@
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0"
+    "@types/react-dom": "^19.0.0",
+    "fake-indexeddb": "^6.2.5",
+    "vitest": "^4.1.10"
   }
 }

@@ -4,7 +4,7 @@ import {
   NotebookPen,
   PackageCheck,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   freshnessPercent,
   type AmountMode,
@@ -16,20 +16,25 @@ import {
   type Recipe,
   type RecipeFilter,
 } from "./domain/recipe";
-import { createMealPlan, type MealPlan, type ShoppingLine } from "./domain/plan";
-import {
-  createDiaryEntry,
-  dateByDaysAgo,
-  todayISO,
-  type DiaryEntry,
-} from "./domain/diary";
+import type { MealPlan, ShoppingLine } from "./domain/plan";
+import type { DiaryEntry } from "./domain/diary";
 import {
   categoryTree,
   foodLibrary,
-  initialInventory,
-  kitchenTools,
   recipesSeed,
 } from "./data/catalog";
+import {
+  createIndexedDbRepositoryProvider,
+  type IndexedDbRepositoryProvider,
+} from "./data/repositories/indexeddb";
+import {
+  addInventoryItems,
+  completeCookingAndConsume,
+  initializeKitchenState,
+  saveTodayPlan,
+  setRecipeFavorite,
+  type KitchenSnapshot,
+} from "./application/kitchenPersistence";
 import { NavButton } from "./components/ui";
 import type { AppView } from "./app/types";
 import { HomeView } from "./features/home/HomeView";
@@ -38,8 +43,14 @@ import { WarehouseView } from "./features/fusion/WarehouseView";
 import { RecipesView } from "./features/recipes/RecipesView";
 import { DiaryView } from "./features/diary/DiaryView";
 
-const PRODUCT_VERSION = "v0.4.0";
-const VERSION_NAME = "数据地基";
+const PRODUCT_VERSION = "v0.4.1";
+const VERSION_NAME = "持久化纵向链路";
+let sharedRepositoryProvider: Promise<IndexedDbRepositoryProvider> | null = null;
+
+function getRepositoryProvider() {
+  sharedRepositoryProvider ??= createIndexedDbRepositoryProvider();
+  return sharedRepositoryProvider;
+}
 
 const personaLibrary = [
   { name: "晨光冰箱长", min: 76, desc: "库存结构清楚，做饭节奏稳定，适合开始养成自己的菜谱库。" },
@@ -50,7 +61,7 @@ const personaLibrary = [
 
 function App() {
   const [view, setView] = useState<AppView>("home");
-  const [inventory, setInventory] = useState<InventoryItem[]>(initialInventory);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadClosing, setUploadClosing] = useState(false);
   const [uploadDone, setUploadDone] = useState(false);
@@ -65,26 +76,56 @@ function App() {
   const [recognizedFoods, setRecognizedFoods] = useState<RecognizedFood[]>([]);
   const [activeToolId, setActiveToolId] = useState("wok");
   const [savedRecipes, setSavedRecipes] = useState<Recipe[]>([]);
-  const [favorites, setFavorites] = useState<string[]>(["eggplant-pork-rice"]);
-  const [cookedIds, setCookedIds] = useState<string[]>(["pepper-egg"]);
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [cookedIds, setCookedIds] = useState<string[]>([]);
   const [recipeFilter, setRecipeFilter] = useState<RecipeFilter>("all");
   const [cuisineFilter, setCuisineFilter] = useState("全部");
   const [todayPlan, setTodayPlan] = useState<MealPlan | null>(null);
   const [shoppingList, setShoppingList] = useState<ShoppingLine[]>([]);
-  const [diary, setDiary] = useState<DiaryEntry[]>([
-    {
-      id: "diary-1",
-      recipeTitle: "青椒炒蛋",
-      date: "昨天",
-      dateISO: dateByDaysAgo(1),
-      source: "做过的菜",
-      note: "下次可以加一点肉沫，口感更完整。",
-      tags: ["快手", "家常", "低洗碗"],
-    },
-  ]);
+  const [diary, setDiary] = useState<DiaryEntry[]>([]);
+  const [persistenceState, setPersistenceState] = useState<"loading" | "ready" | "saving" | "error">("loading");
+  const [persistenceNotice, setPersistenceNotice] = useState("正在恢复本地厨房数据");
+  const repositoryProvider = useRef<IndexedDbRepositoryProvider | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    async function restoreKitchen() {
+      try {
+        const provider = await getRepositoryProvider();
+        if (!active) return;
+        repositoryProvider.current = provider;
+        const snapshot = await initializeKitchenState(provider);
+        if (!active) return;
+        applySnapshot(snapshot);
+        setPersistenceState("ready");
+        setPersistenceNotice("数据已保存在此设备");
+      } catch (error) {
+        console.error("Failed to initialize local persistence", error);
+        if (!active) return;
+        setPersistenceState("error");
+        setPersistenceNotice("本地数据初始化失败，请刷新重试");
+      }
+    }
+
+    void restoreKitchen();
+    return () => {
+      active = false;
+      repositoryProvider.current = null;
+    };
+  }, []);
+
+  function applySnapshot(snapshot: KitchenSnapshot) {
+    setInventory(snapshot.inventory);
+    setSavedRecipes(snapshot.savedRecipes);
+    setFavorites(snapshot.favorites);
+    setCookedIds(snapshot.cookedIds);
+    setTodayPlan(snapshot.todayPlan);
+    setShoppingList(snapshot.shoppingList);
+    setDiary(snapshot.diary);
+  }
 
   const selectedFood = foodLibrary.find((item) => item.id === selectedFoodId) ?? foodLibrary[0];
-  const selectedTool = kitchenTools.find((tool) => tool.id === activeToolId) ?? kitchenTools[0];
   const recipeCatalog = useMemo(() => {
     const catalog = new Map<string, Recipe>();
     [...recipesSeed, ...savedRecipes].forEach((recipe) => catalog.set(recipe.id, recipe));
@@ -151,12 +192,36 @@ function App() {
             customTags: isSelected ? (note ? [note] : []) : ["AI识别待确认"],
           };
         });
-      setInventory((current) => [...nextItems, ...current]);
+      void persistUploadedItems(nextItems);
+    }, 560);
+  }
+
+  async function persistUploadedItems(nextItems: InventoryItem[]) {
+    const provider = repositoryProvider.current;
+    if (!provider) {
+      setUploadDone(false);
+      setPersistenceState("error");
+      setPersistenceNotice("数据库尚未就绪，请稍后重试");
+      return;
+    }
+
+    setPersistenceState("saving");
+    setPersistenceNotice("正在保存食材");
+    try {
+      const nextInventory = await addInventoryItems(provider, nextItems, method);
+      setInventory(nextInventory);
       setUploadOpen(false);
       setUploadDone(false);
       setRecognizedFoods([]);
       setView("warehouse");
-    }, 560);
+      setPersistenceState("ready");
+      setPersistenceNotice(`已新增 ${nextItems.length} 份库存`);
+    } catch (error) {
+      console.error("Failed to persist inventory", error);
+      setUploadDone(false);
+      setPersistenceState("error");
+      setPersistenceNotice("食材保存失败，库存没有被修改");
+    }
   }
 
   function selectFood(foodId: string) {
@@ -188,32 +253,77 @@ function App() {
     setSavedRecipes((current) => (current.some((item) => item.id === recipe.id) ? current : [recipe, ...current]));
   }
 
-  function toolForRecipe(recipe: Recipe) {
-    return kitchenTools.find((tool) => tool.id === recipe.toolId) ?? selectedTool;
-  }
-
-  function toggleFavorite(recipe: Recipe) {
-    if (!favorites.includes(recipe.id)) rememberRecipe(recipe);
+  async function toggleFavorite(recipe: Recipe) {
+    const provider = repositoryProvider.current;
+    if (!provider) return;
+    const wasFavorite = favorites.includes(recipe.id);
+    if (!wasFavorite) rememberRecipe(recipe);
     setFavorites((current) =>
-      current.includes(recipe.id) ? current.filter((id) => id !== recipe.id) : [recipe.id, ...current],
+      wasFavorite ? current.filter((id) => id !== recipe.id) : [recipe.id, ...current],
     );
+    setPersistenceState("saving");
+    setPersistenceNotice(wasFavorite ? "正在取消收藏" : "正在收藏菜谱");
+    try {
+      await setRecipeFavorite(provider, recipe, !wasFavorite);
+      setPersistenceState("ready");
+      setPersistenceNotice(wasFavorite ? "已取消收藏" : "菜谱已收藏");
+    } catch (error) {
+      console.error("Failed to persist favorite", error);
+      setFavorites((current) =>
+        wasFavorite ? [recipe.id, ...current] : current.filter((id) => id !== recipe.id),
+      );
+      setPersistenceState("error");
+      setPersistenceNotice("收藏状态保存失败，已恢复原状态");
+    }
   }
 
-  function planToday(recipe: Recipe, source: string) {
+  async function planToday(recipe: Recipe, source: string, selectedInventoryIds: string[] = []) {
+    const provider = repositoryProvider.current;
+    if (!provider) return;
     rememberRecipe(recipe);
-    const next = createMealPlan(recipe, source, inventory, todayISO());
-    setTodayPlan(next.plan);
-    setShoppingList(next.shoppingList);
-    setView("diary");
+    setPersistenceState("saving");
+    setPersistenceNotice("正在生成今日计划与购物清单");
+    try {
+      const next = await saveTodayPlan(provider, recipe, source, inventory, selectedInventoryIds);
+      setTodayPlan(next.plan);
+      setShoppingList(next.shoppingList);
+      setView("diary");
+      setPersistenceState("ready");
+      setPersistenceNotice("今日菜单已保存");
+    } catch (error) {
+      console.error("Failed to persist meal plan", error);
+      setPersistenceState("error");
+      setPersistenceNotice("今日菜单保存失败，请重试");
+    }
   }
 
-  function completeCooking(recipe: Recipe, source: string) {
+  async function completeCooking(recipe: Recipe, _source: string) {
+    const provider = repositoryProvider.current;
+    if (!provider || !todayPlan || todayPlan.recipe.id !== recipe.id) {
+      setPersistenceState("error");
+      setPersistenceNotice("没有找到可完成的今日菜单");
+      return;
+    }
     rememberRecipe(recipe);
-    const entry = createDiaryEntry(recipe, source, toolForRecipe(recipe), todayISO());
-    setDiary((current) => [entry, ...current]);
-    setCookedIds((current) => (current.includes(recipe.id) ? current : [recipe.id, ...current]));
-    setTodayPlan((current) => (current?.recipe.id === recipe.id ? null : current));
-    setView("diary");
+    setPersistenceState("saving");
+    setPersistenceNotice("正在记录制作并扣减库存");
+    try {
+      const completion = await completeCookingAndConsume(provider, todayPlan);
+      applySnapshot(completion.snapshot);
+      setView("diary");
+      setPersistenceState("ready");
+      setPersistenceNotice(
+        completion.alreadyCompleted
+          ? "这道菜已记录过，没有重复扣减库存"
+          : completion.consumed.length
+            ? `制作完成，已扣减 ${completion.consumed.length} 类食材`
+            : "制作完成，未找到可自动扣减的库存",
+      );
+    } catch (error) {
+      console.error("Failed to complete cooking", error);
+      setPersistenceState("error");
+      setPersistenceNotice("制作记录失败，库存没有被扣减");
+    }
   }
 
   return (
@@ -230,7 +340,20 @@ function App() {
           <div className="versionPill">{VERSION_NAME}</div>
         </header>
 
+        <div className={`persistenceToast ${persistenceState}`} role="status">
+          <span />
+          {persistenceNotice}
+        </div>
+
         <main className={`screen ${view === "warehouse" ? "warehouseScreen" : ""}`}>
+          {persistenceState === "loading" && (
+            <div className="persistenceLoading">
+              <strong>正在打开你的厨房</strong>
+              <span>恢复库存、菜谱、计划和日记</span>
+            </div>
+          )}
+          {persistenceState !== "loading" && (
+            <>
           {view === "home" && (
             <HomeView
               stats={stats}
@@ -264,7 +387,9 @@ function App() {
               planToday={planToday}
             />
           )}
-          {view === "diary" && <DiaryView diary={diary} shoppingList={shoppingList} inventory={inventory} todayPlan={todayPlan} completeCooking={completeCooking} />}
+          {view === "diary" && <DiaryView diary={diary} shoppingList={shoppingList} inventory={inventory} todayPlan={todayPlan} completeCooking={completeCooking} cookingBusy={persistenceState === "saving"} />}
+            </>
+          )}
         </main>
 
         <nav className="bottomNav" aria-label="主导航">

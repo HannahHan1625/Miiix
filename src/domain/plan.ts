@@ -13,6 +13,7 @@ export type MealPlan = {
   recipe: Recipe;
   source: string;
   plannedDateISO: string;
+  selectedInventoryIds: string[];
 };
 
 export function createMealPlan(
@@ -20,6 +21,7 @@ export function createMealPlan(
   source: string,
   inventory: InventoryItem[],
   plannedDateISO: string,
+  selectedInventoryIds: string[] = [],
   timestamp = Date.now(),
 ) {
   const ownedNames = new Set(inventory.map((item) => item.name));
@@ -37,6 +39,11 @@ export function createMealPlan(
       recipe,
       source,
       plannedDateISO,
+      selectedInventoryIds: selectedInventoryIds.length
+        ? selectedInventoryIds
+        : inventory
+          .filter((item) => recipe.required.includes(item.name))
+          .map((item) => item.inventoryId),
     } satisfies MealPlan,
     shoppingList: missingLines.length
       ? missingLines

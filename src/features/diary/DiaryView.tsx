@@ -27,12 +27,14 @@ function TodayPlanPanel({
   expanded,
   setExpanded,
   completeCooking,
+  cookingBusy,
 }: {
   plan: MealPlan;
   shoppingList: ShoppingLine[];
   expanded: boolean;
   setExpanded: (value: boolean) => void;
-  completeCooking: (recipe: Recipe, source: string) => void;
+  completeCooking: (recipe: Recipe, source: string) => void | Promise<void>;
+  cookingBusy: boolean;
 }) {
   const mainIngredients = recipeMainIngredients(plan.recipe);
   const missingCount = shoppingList.filter((line) => !line.owned && line.name !== "库存已覆盖全部食材").length;
@@ -67,8 +69,8 @@ function TodayPlanPanel({
         <button className="ghostButton" type="button" onClick={() => setExpanded(!expanded)}>
           <ClipboardList size={16} /> {expanded ? "收起步骤" : "开始制作"}
         </button>
-        <button className="primaryButton" type="button" onClick={() => completeCooking(plan.recipe, plan.source)}>
-          <Check size={16} /> 完成制作
+        <button className="primaryButton" type="button" disabled={cookingBusy} onClick={() => completeCooking(plan.recipe, plan.source)}>
+          <Check size={16} /> {cookingBusy ? "正在记录" : "完成制作"}
         </button>
       </div>
     </article>
@@ -81,12 +83,14 @@ export function DiaryView({
   inventory,
   todayPlan,
   completeCooking,
+  cookingBusy,
 }: {
   diary: DiaryEntry[];
   shoppingList: ShoppingLine[];
   inventory: InventoryItem[];
   todayPlan: MealPlan | null;
-  completeCooking: (recipe: Recipe, source: string) => void;
+  completeCooking: (recipe: Recipe, source: string) => void | Promise<void>;
+  cookingBusy: boolean;
 }) {
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [planExpanded, setPlanExpanded] = useState(false);
@@ -127,6 +131,7 @@ export function DiaryView({
           expanded={planExpanded}
           setExpanded={setPlanExpanded}
           completeCooking={completeCooking}
+          cookingBusy={cookingBusy}
         />
       )}
       <div className="ledgerSummary">
@@ -196,7 +201,7 @@ export function DiaryView({
             <div>
               <span>做菜支出</span>
               <strong>{entry.recipeTitle}</strong>
-              <small>{entry.tags.join(" · ")}</small>
+              <small>{entry.note}</small>
             </div>
             <b>-1</b>
           </article>
@@ -213,5 +218,4 @@ export function DiaryView({
     </section>
   );
 }
-
 

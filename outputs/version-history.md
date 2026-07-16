@@ -278,3 +278,27 @@ Product judgment:
 - This version defines the data contract; it does not claim that a live database or real AI pipeline is connected.
 - The next quality gate is a Supabase Repository adapter plus a reviewed seed catalog for the first 200 high-frequency household ingredients.
 - UI work remains secondary until inventory and recipe lifecycle data persist through reload.
+
+## v0.4.1 — 持久化纵向链路
+
+Date: 2026-07-17
+
+Scope:
+
+- Implemented an IndexedDB Repository Adapter for catalog, inventory, recipe, planning, cooking, recognition, and recommendation contracts.
+- Added a Repository Provider with an application-level transaction boundary.
+- Replaced `App.tsx` memory-only writes with persistent application services.
+- Persisted inventory lots and purchase ledger entries from the ingredient upload flow.
+- Persisted generated recipes, favorites, today's plan, shopping list, cooking sessions, and inventory consumption.
+- Made cooking completion and stock deduction atomic.
+- Added idempotency keys so repeated completion cannot deduct the same lot twice.
+- Restored inventory, recipes, favorites, plan, diary, and shopping list after refresh.
+- Added migration `0005` for portable metadata and cooking-session idempotency.
+- Added a vertical integration test covering add, reload, plan, cook, deduct, retry, and reload.
+- Fixed the local business-date mapping so cooking after midnight is not recorded on the previous UTC day.
+
+Product judgment:
+
+- This is the first version where the recipe lifecycle is backed by durable state instead of React demo state.
+- IndexedDB is appropriate for GitHub Pages validation but does not provide accounts, cross-device sync, backup, or server-side AI security.
+- The next quality gate is data quality: build and review the first high-frequency ingredient catalog before connecting real recognition or recommendation models.

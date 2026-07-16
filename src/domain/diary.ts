@@ -9,6 +9,15 @@ export type DiaryEntry = {
   source: string;
   note: string;
   tags: string[];
+  consumed: ConsumedInventoryItem[];
+};
+
+export type ConsumedInventoryItem = {
+  inventoryId: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  remaining: number;
 };
 
 export function toISODate(date: Date) {
@@ -72,6 +81,7 @@ export function createDiaryEntry(
   source: string,
   tool: KitchenTool,
   completedDateISO: string,
+  consumed: ConsumedInventoryItem[] = [],
   timestamp = Date.now(),
 ): DiaryEntry {
   return {
@@ -80,7 +90,10 @@ export function createDiaryEntry(
     date: "今天",
     dateISO: completedDateISO,
     source,
-    note: `由 ${source} 完成制作；这条记录会进入后续口味偏好学习。`,
+    note: consumed.length
+      ? `已扣减库存：${consumed.map((item) => `${item.name} ${item.quantity}${item.unit}`).join("、")}。`
+      : `由 ${source} 完成制作；这条记录会进入后续口味偏好学习。`,
     tags: [recipe.cuisine, recipe.difficulty, tool.name],
+    consumed,
   };
 }

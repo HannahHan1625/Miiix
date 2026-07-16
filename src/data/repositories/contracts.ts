@@ -88,6 +88,7 @@ export type CreateMealPlanInput = {
   plannedDate: ISODate;
   source: string;
   recipeIds: EntityId[];
+  metadata?: MealPlanRecord["metadata"];
 };
 
 export type CreateRecognitionJobInput = Pick<
@@ -99,9 +100,14 @@ export type SaveRecognitionCandidateInput = Omit<RecognitionCandidate, "id" | "j
 
 export type CreateCookingSessionInput = Pick<
   CookingSessionRecord,
-  "userId" | "recipeId" | "mealPlanItemId"
+  "userId" | "recipeId" | "mealPlanItemId" | "idempotencyKey"
 > & {
   startedAt?: ISODateTime;
+};
+
+export type ShoppingListBundle = {
+  list: ShoppingListRecord;
+  items: ShoppingListItemRecord[];
 };
 
 export type CompleteCookingSessionInput = Partial<
@@ -183,6 +189,7 @@ export interface PlanningRepository {
     shoppingListId: EntityId,
     items: Omit<ShoppingListItemRecord, "id" | "shoppingListId">[],
   ): Promise<ShoppingListItemRecord[]>;
+  getShoppingList(userId: EntityId, mealPlanId: EntityId | null): Promise<ShoppingListBundle | null>;
 }
 
 export interface CookingRepository {

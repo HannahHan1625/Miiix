@@ -66,6 +66,7 @@ p {
 }
 
 .appFrame {
+  position: relative;
   width: min(100%, 1180px);
   height: min(920px, calc(100vh - 44px));
   min-height: 740px;
@@ -76,6 +77,73 @@ p {
   overflow: hidden;
   display: grid;
   grid-template-rows: 74px 1fr 76px;
+}
+
+.persistenceToast {
+  position: absolute;
+  z-index: 40;
+  top: 82px;
+  left: 50%;
+  max-width: calc(100% - 28px);
+  min-height: 32px;
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 253, 245, 0.96);
+  box-shadow: 0 10px 26px rgba(67, 72, 75, 0.12);
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 750;
+  transform: translateX(-50%);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.persistenceToast span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.persistenceToast.loading span,
+.persistenceToast.saving span {
+  background: var(--yellow);
+  animation: persistencePulse 1s ease-in-out infinite;
+}
+
+.persistenceToast.error {
+  color: #8a443a;
+  border-color: rgba(138, 68, 58, 0.24);
+}
+
+.persistenceToast.error span {
+  background: #d98578;
+}
+
+.persistenceLoading {
+  min-height: 52vh;
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.persistenceLoading strong {
+  color: var(--ink);
+  font-size: 18px;
+}
+
+.persistenceLoading span {
+  font-size: 13px;
+}
+
+@keyframes persistencePulse {
+  50% { opacity: 0.35; }
 }
 
 .topbar {
