@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   freshnessPercent,
   type AmountMode,
+  type FoodInfo,
   type InventoryItem,
   type RecognizedFood,
   type UploadMethod,
@@ -18,11 +19,7 @@ import {
 } from "./domain/recipe";
 import type { MealPlan, ShoppingLine } from "./domain/plan";
 import type { DiaryEntry } from "./domain/diary";
-import {
-  categoryTree,
-  foodLibrary,
-  recipesSeed,
-} from "./data/catalog";
+import { recipesSeed } from "./data/catalog";
 import {
   createIndexedDbRepositoryProvider,
   type IndexedDbRepositoryProvider,
@@ -35,6 +32,7 @@ import {
   setRecipeFavorite,
   type KitchenSnapshot,
 } from "./application/kitchenPersistence";
+import type { CatalogCategoryView } from "./application/catalogView";
 import { NavButton } from "./components/ui";
 import type { AppView } from "./app/types";
 import { HomeView } from "./features/home/HomeView";
@@ -43,8 +41,9 @@ import { WarehouseView } from "./features/fusion/WarehouseView";
 import { RecipesView } from "./features/recipes/RecipesView";
 import { DiaryView } from "./features/diary/DiaryView";
 
-const PRODUCT_VERSION = "v0.4.1";
-const VERSION_NAME = "持久化纵向链路";
+const PRODUCT_VERSION = "v0.4.2";
+const VERSION_NAME = "食材主数据";
+const DEFAULT_INGREDIENT_ID = "50000000-0000-4000-8000-000000000002";
 let sharedRepositoryProvider: Promise<IndexedDbRepositoryProvider> | null = null;
 
 function getRepositoryProvider() {
@@ -61,17 +60,19 @@ const personaLibrary = [
 
 function App() {
   const [view, setView] = useState<AppView>("home");
+  const [catalogFoods, setCatalogFoods] = useState<FoodInfo[]>([]);
+  const [catalogCategories, setCatalogCategories] = useState<CatalogCategoryView[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadClosing, setUploadClosing] = useState(false);
   const [uploadDone, setUploadDone] = useState(false);
   const [method, setMethod] = useState<UploadMethod>("manual");
-  const [level1, setLevel1] = useState("肉禽蛋品");
-  const [level2, setLevel2] = useState("鸡肉");
-  const [selectedFoodId, setSelectedFoodId] = useState("chickenWing");
-  const [amountMode, setAmountMode] = useState<AmountMode>("weight");
-  const [amount, setAmount] = useState(500);
-  const [price, setPrice] = useState(18.9);
+  const [level1, setLevel1] = useState("");
+  const [level2, setLevel2] = useState("");
+  const [selectedFoodId, setSelectedFoodId] = useState("");
+  const [amountMode, setAmountMode] = useState<AmountMode>("mass");
+  const [amount, setAmount] = useState(250);
+  const [price, setPrice] = useState<number | null>(null);
   const [note, setNote] = useState("冷冻分装");
   const [recognizedFoods, setRecognizedFoods] = useState<RecognizedFood[]>([]);
   const [activeToolId, setActiveToolId] = useState("wok");
@@ -116,6 +117,22 @@ function App() {
   }, []);
 
   function applySnapshot(snapshot: KitchenSnapshot) {
+    setCatalogFoods(snapshot.catalogFoods);
+    setCatalogCategories(snapshot.catalogCategories);
+    const currentFood = snapshot.catalogFoods.find((item) => item.id === selectedFoodId);
+    const nextFood = currentFood
+      ?? snapshot.catalogFoods.find((item) => item.id === DEFAULT_INGREDIENT_ID)
+      ?? snapshot.catalogFoods[0];
+    if (nextFood) {
+      setSelectedFoodId(nextFood.id);
+      setLevel1(nextFood.level1);
+      setLevel2(nextFood.level2);
+      if (!currentFood) {
+        setAmountMode(nextFood.defaultMode);
+        setAmount(nextFood.defaultAmount);
+        setNote(nextFood.storageTags[0] ?? "");
+      }
+    }
     setInventory(snapshot.inventory);
     setSavedRecipes(snapshot.savedRecipes);
     setFavorites(snapshot.favorites);
@@ -125,7 +142,7 @@ function App() {
     setDiary(snapshot.diary);
   }
 
-  const selectedFood = foodLibrary.find((item) => item.id === selectedFoodId) ?? foodLibrary[0];
+  const selectedFood = catalogFoods.find((item) => item.id === selectedFoodId) ?? catalogFoods[0];
   const recipeCatalog = useMemo(() => {
     const catalog = new Map<string, Recipe>();
     [...recipesSeed, ...savedRecipes].forEach((recipe) => catalog.set(recipe.id, recipe));
@@ -136,10 +153,16 @@ function App() {
     const storedScore = Math.min(100, Math.round((inventory.length / 14) * 100));
     const cookFrequency = 4;
     const cookedCount = diary.length + cookedIds.length;
-    const freshnessScore = Math.round(
-      inventory.reduce((sum, item) => sum + freshnessPercent(item), 0) / Math.max(inventory.length, 1),
-    );
-    const total = Math.round(storedScore * 0.32 + cookFrequency * 10 * 0.28 + cookedCount * 10 * 0.2 + freshnessScore * 0.2);
+    const knownFreshnessScores = inventory
+      .map(freshnessPercent)
+      .filter((score): score is number => score !== null);
+    const freshnessScore = knownFreshnessScores.length
+      ? Math.round(knownFreshnessScores.reduce((sum, score) => sum + score, 0) / knownFreshnessScores.length)
+      : null;
+    const knownSubtotal = storedScore * 0.32 + cookFrequency * 10 * 0.28 + cookedCount * 10 * 0.2;
+    const total = Math.round(freshnessScore === null
+      ? knownSubtotal / 0.8
+      : knownSubtotal + freshnessScore * 0.2);
     const persona = personaLibrary.find((item) => total >= item.min) ?? personaLibrary[personaLibrary.length - 1];
     return { storedScore, cookFrequency, cookedCount, freshnessScore, total, persona };
   }, [cookedIds.length, diary.length, inventory]);
@@ -172,24 +195,26 @@ function App() {
   }
 
   function completeUpload() {
+    if (!selectedFood) return;
     setUploadDone(true);
     window.setTimeout(() => {
       const timestamp = Date.now();
       const foodIds = recognizedFoods.filter((item) => item.status !== "ignored").map((item) => item.foodId);
       const targetFoodIds = foodIds.length ? foodIds : [selectedFood.id];
       const nextItems = targetFoodIds
-        .map((foodId) => foodLibrary.find((item) => item.id === foodId) ?? selectedFood)
+        .map((foodId) => catalogFoods.find((item) => item.id === foodId) ?? selectedFood)
         .map((foodInfo, index): InventoryItem => {
           const isSelected = foodInfo.id === selectedFood.id;
           return {
             ...foodInfo,
             inventoryId: `${foodInfo.id}-${timestamp}-${index}`,
             amountMode: isSelected ? amountMode : foodInfo.defaultMode,
-            amount: isSelected ? amount : foodInfo.defaultMode === "count" ? foodInfo.defaultCount : foodInfo.defaultWeight,
-            pricePaid: isSelected ? price : foodInfo.price,
+            amount: isSelected ? amount : foodInfo.defaultAmount,
+            pricePaid: isSelected ? price : null,
             note: isSelected ? note : "AI识别待确认",
             addedDaysAgo: 0,
             customTags: isSelected ? (note ? [note] : []) : ["AI识别待确认"],
+            expiresAtISO: null,
           };
         });
       void persistUploadedItems(nextItems);
@@ -225,25 +250,25 @@ function App() {
   }
 
   function selectFood(foodId: string) {
-    const next = foodLibrary.find((item) => item.id === foodId);
+    const next = catalogFoods.find((item) => item.id === foodId);
     if (!next) return;
     setSelectedFoodId(foodId);
     setAmountMode(next.defaultMode);
-    setAmount(next.defaultMode === "count" ? next.defaultCount : next.defaultWeight);
-    setPrice(next.price);
+    setAmount(next.defaultAmount);
+    setPrice(null);
     setNote(next.storageTags[0] ?? "");
   }
 
   function chooseLevel1(nextLevel1: string) {
-    const nextL2 = categoryTree.find((item) => item.level1 === nextLevel1)?.level2[0]?.name;
-    const nextFood = foodLibrary.find((item) => item.level1 === nextLevel1 && item.level2 === nextL2);
+    const nextL2 = catalogCategories.find((item) => item.level1 === nextLevel1)?.level2[0]?.name;
+    const nextFood = catalogFoods.find((item) => item.level1 === nextLevel1 && item.level2 === nextL2);
     setLevel1(nextLevel1);
     if (nextL2) setLevel2(nextL2);
     if (nextFood) selectFood(nextFood.id);
   }
 
   function chooseLevel2(nextLevel2: string) {
-    const nextFood = foodLibrary.find((item) => item.level1 === level1 && item.level2 === nextLevel2);
+    const nextFood = catalogFoods.find((item) => item.level1 === level1 && item.level2 === nextLevel2);
     setLevel2(nextLevel2);
     if (nextFood) selectFood(nextFood.id);
   }
@@ -365,6 +390,7 @@ function App() {
           {view === "warehouse" && (
             <WarehouseView
               inventory={inventory}
+              catalogFoods={catalogFoods}
               activeToolId={activeToolId}
               setActiveToolId={setActiveToolId}
               favorites={favorites}
@@ -400,7 +426,7 @@ function App() {
         </nav>
       </div>
 
-      {uploadOpen && (
+      {uploadOpen && selectedFood && (
         <UploadSheet
           closing={uploadClosing}
           done={uploadDone}
@@ -411,6 +437,8 @@ function App() {
           chooseLevel1={chooseLevel1}
           chooseLevel2={chooseLevel2}
           selectedFood={selectedFood}
+          catalogFoods={catalogFoods}
+          categoryTree={catalogCategories}
           selectFood={selectFood}
           amountMode={amountMode}
           setAmountMode={setAmountMode}

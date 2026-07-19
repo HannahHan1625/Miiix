@@ -791,6 +791,12 @@ h2 {
   font-size: 15px;
 }
 
+.foodChoiceGrid span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .foodChoiceGrid small {
   color: var(--muted);
   font-size: 11px;

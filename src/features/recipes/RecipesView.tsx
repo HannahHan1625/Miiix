@@ -166,7 +166,7 @@ export function RecipesView({
             <h2>{recipe.title}</h2>
             <RecipeMeta recipe={recipe} />
             <p>{recipe.reason}</p>
-            <div className="needLine"><Utensils size={15} /> 需要：{recipe.required.join("、")}</div>
+            <div className="needLine"><Utensils size={15} /> 需要：{recipe.ingredients.map((item) => item.name).join("、")}</div>
             <div className="cardActions">
               <span>{cookedIds.includes(recipe.id) ? "做过" : "未做"}</span>
               <button className="primaryButton" type="button" onClick={() => planToday(recipe, "菜谱选择")}>
@@ -179,5 +179,4 @@ export function RecipesView({
     </section>
   );
 }
-
 

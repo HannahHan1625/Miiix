@@ -13,7 +13,7 @@ export function HomeView({
     storedScore: number;
     cookFrequency: number;
     cookedCount: number;
-    freshnessScore: number;
+    freshnessScore: number | null;
     total: number;
     persona: { name: string; desc: string; min: number };
   };
@@ -78,5 +78,4 @@ function IngredientPreview({ inventory }: { inventory: InventoryItem[] }) {
     </div>
   );
 }
-
 

@@ -6,6 +6,7 @@ import type {
   IngredientAlias,
   IngredientAsset,
   IngredientStorageProfile,
+  IngredientUnitConversion,
   InventoryLot,
   InventoryTransaction,
   ISODate,
@@ -14,6 +15,7 @@ import type {
   KitchenToolDefinition,
   MealPlanRecord,
   NutritionProfile,
+  ExternalIngredientMapping,
   RecognitionCandidate,
   RecognitionJob,
   RecipeDocument,
@@ -31,6 +33,7 @@ import type {
 export type IngredientQuery = {
   text?: string;
   categoryId?: EntityId;
+  storageMethodId?: EntityId;
   kind?: CanonicalIngredient["kind"];
   status?: CanonicalIngredient["status"];
   limit?: number;
@@ -40,9 +43,13 @@ export type IngredientDetail = {
   ingredient: CanonicalIngredient;
   aliases: IngredientAlias[];
   categoryIds: EntityId[];
+  defaultStorageProfileId: EntityId | null;
   storageProfiles: IngredientStorageProfile[];
+  supportedUnitIds: EntityId[];
+  unitConversions: IngredientUnitConversion[];
   nutritionProfiles: NutritionProfile[];
   assets: IngredientAsset[];
+  externalMappings: ExternalIngredientMapping[];
 };
 
 export type CreateInventoryLotInput = Omit<

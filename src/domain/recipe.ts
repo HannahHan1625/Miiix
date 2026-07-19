@@ -7,12 +7,18 @@ export type Recipe = {
   cuisine: string;
   difficulty: "轻松" | "认真" | "挑战";
   minutes: number;
-  calories: number;
+  calories: number | null;
   image: string;
-  required: string[];
+  ingredients: RecipeIngredient[];
   toolId: string;
   reason: string;
   steps: string[];
+};
+
+export type RecipeIngredient = {
+  ingredientId: string;
+  name: string;
+  role: "main" | "seasoning" | "optional" | "garnish";
 };
 
 export type KitchenTool = {
@@ -43,12 +49,18 @@ export type RecipeInference = {
   steps: string[];
 };
 
-const seasoningWords = new Set(["生抽", "少量糖", "糖", "柠檬", "橄榄油", "蜂蜜", "牛奶", "冰块", "清水", "盐"]);
-
 export function recipeSeasonings(recipe: Recipe) {
-  return recipe.required.filter((item) => seasoningWords.has(item));
+  return recipe.ingredients
+    .filter((item) => item.role === "seasoning")
+    .map((item) => item.name);
 }
 
 export function recipeMainIngredients(recipe: Recipe) {
-  return recipe.required.filter((item) => !seasoningWords.has(item));
+  return recipe.ingredients
+    .filter((item) => item.role === "main")
+    .map((item) => item.name);
+}
+
+export function recipeIngredientNames(recipe: Recipe) {
+  return recipe.ingredients.map((item) => item.name);
 }

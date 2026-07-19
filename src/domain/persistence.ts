@@ -50,11 +50,17 @@ export type CanonicalIngredient = {
   slug: string;
   canonicalNameZh: string;
   canonicalNameEn: string | null;
+  scientificName: string | null;
   kind: IngredientKind;
   defaultUnitId: EntityId | null;
+  defaultAmountMode: UnitDimension;
+  defaultPurchaseQuantity: number | null;
   parentIngredientId: EntityId | null;
   sourceId: EntityId | null;
   status: IngredientStatus;
+  dataVersion: string;
+  reviewedBy: string;
+  reviewedAt: ISODateTime;
   metadata: Record<string, JsonValue>;
   createdAt: ISODateTime;
   updatedAt: ISODateTime;
@@ -64,11 +70,15 @@ export type IngredientAlias = {
   id: EntityId;
   ingredientId: EntityId;
   locale: string;
+  regionCode: string | null;
   alias: string;
   normalizedAlias: string;
-  aliasType: "common" | "regional" | "retail" | "ocr" | "translation";
+  aliasType: "common" | "regional" | "retail" | "ocr" | "translation" | "external_model" | "recipe_phrase";
   confidence: number;
+  sourceId: EntityId | null;
   reviewStatus: ReviewStatus;
+  reviewedBy: string | null;
+  reviewedAt: ISODateTime | null;
 };
 
 export type StorageMethod = {
@@ -86,13 +96,23 @@ export type IngredientStorageProfile = {
   id: EntityId;
   ingredientId: EntityId;
   storageMethodId: EntityId;
-  shelfLifeDays: number;
+  shelfLifeDays: number | null;
+  recommendedMinDays: number | null;
+  recommendedMaxDays: number | null;
   afterOpeningDays: number | null;
   freshnessWarningDays: number | null;
+  regionCode: string;
+  environmentTags: string[];
+  foodState: string;
+  packagingState: string;
+  endpoint: "safety" | "quality" | "package_label";
   instructions: string | null;
+  evidenceKey: string | null;
   sourceId: EntityId | null;
   confidence: number;
   reviewStatus: ReviewStatus;
+  reviewedBy: string | null;
+  reviewedAt: ISODateTime | null;
 };
 
 export type NutritionProfile = {
@@ -105,7 +125,26 @@ export type NutritionProfile = {
   fatG: number | null;
   carbohydrateG: number | null;
   fiberG: number | null;
+  dataClassification: "analytical" | "calculated" | "borrowed" | "estimated" | "not_measured";
+  foodState: string;
+  sourceRecordId: string | null;
+  sourceRelease: string | null;
+  externalMappingId: EntityId | null;
+  matchType: "exact" | "representative" | "none";
   sourceId: EntityId | null;
+  reviewStatus: ReviewStatus;
+  reviewedBy: string | null;
+  reviewedAt: ISODateTime | null;
+};
+
+export type IngredientUnitConversion = {
+  id: EntityId;
+  ingredientId: EntityId;
+  fromUnitId: EntityId;
+  toUnitId: EntityId;
+  factor: number;
+  sourceId: EntityId | null;
+  confidence: number;
   reviewStatus: ReviewStatus;
 };
 
@@ -114,13 +153,44 @@ export type IngredientAsset = {
   ingredientId: EntityId;
   assetUri: string;
   assetType: "source_photo" | "cutout" | "thumbnail";
+  altText: string;
   backgroundRemoved: boolean;
   outlineApplied: boolean;
   sourceUrl: string | null;
   license: string | null;
   attribution: string | null;
+  providerAssetId: string | null;
+  originalUrl: string | null;
+  processedUrl: string | null;
+  licenseCode: string;
+  licenseUrl: string | null;
+  licenseStatus: "approved" | "approved_for_prototype" | "pending" | "rejected";
+  rightsStatus: "unknown" | "research_only" | "verified" | "restricted";
+  processingStatus: "original" | "pending" | "processed" | "failed" | "placeholder";
+  sourceSha256: string | null;
+  processedSha256: string | null;
+  transformLog: string[];
+  styleConsistency: "prototype_placeholder" | "consistent" | "needs_review";
+  aiGeneration: { model: string; prompt: string } | null;
+  subjectMatchReviewed: boolean;
+  rightsReviewed: boolean;
   reviewStatus: ReviewStatus;
   isPrimary: boolean;
+};
+
+export type ExternalIngredientMapping = {
+  id: EntityId;
+  ingredientId: EntityId;
+  provider: string;
+  externalKey: string;
+  externalLabel: string | null;
+  matchType: "exact" | "representative" | "broader" | "narrower" | "related";
+  confidence: number;
+  sourceId: EntityId | null;
+  reviewStatus: ReviewStatus;
+  reviewedBy: string | null;
+  reviewedAt: ISODateTime | null;
+  metadata: Record<string, JsonValue>;
 };
 
 export type KitchenToolDefinition = {

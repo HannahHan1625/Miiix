@@ -1,10 +1,15 @@
 import {
+  Apple,
   Camera,
+  Carrot,
   Check,
   ChevronLeft,
   CircleDollarSign,
   Image,
   Keyboard,
+  Drumstick,
+  Fish,
+  Leaf,
   PackageCheck,
   ReceiptText,
   Scale,
@@ -12,10 +17,13 @@ import {
   Sparkles,
   Tags,
   Upload,
+  Wheat,
 } from "lucide-react";
 import { FoodImage } from "../../components/ui";
-import { categoryTree, foodLibrary, recognitionPresets } from "../../data/catalog";
+import { recognitionPresets } from "../../data/catalog";
+import type { CatalogCategoryView } from "../../application/catalogView";
 import {
+  amountModeText,
   storageText,
   type AmountMode,
   type FoodInfo,
@@ -30,6 +38,7 @@ const uploadMethods = [
   { id: "receipt", label: "小票", icon: ReceiptText, note: "适合线下超市购物小票。" },
   { id: "manual", label: "手动输入", icon: Keyboard, note: "最快补录，分类和默认值自动带出。" },
 ] satisfies { id: UploadMethod; label: string; icon: typeof Camera; note: string }[];
+const categoryIcons = [Drumstick, Carrot, Wheat, Leaf, Fish, Apple];
 
 export function UploadSheet({
   closing,
@@ -41,6 +50,8 @@ export function UploadSheet({
   chooseLevel1,
   chooseLevel2,
   selectedFood,
+  catalogFoods,
+  categoryTree,
   selectFood,
   amountMode,
   setAmountMode,
@@ -64,13 +75,15 @@ export function UploadSheet({
   chooseLevel1: (value: string) => void;
   chooseLevel2: (value: string) => void;
   selectedFood: FoodInfo;
+  catalogFoods: FoodInfo[];
+  categoryTree: CatalogCategoryView[];
   selectFood: (id: string) => void;
   amountMode: AmountMode;
   setAmountMode: (mode: AmountMode) => void;
   amount: number;
   setAmount: (value: number) => void;
-  price: number;
-  setPrice: (value: number) => void;
+  price: number | null;
+  setPrice: (value: number | null) => void;
   note: string;
   setNote: (value: string) => void;
   recognizedFoods: RecognizedFood[];
@@ -79,7 +92,7 @@ export function UploadSheet({
   onDone: () => void;
 }) {
   const secondLevels = categoryTree.find((item) => item.level1 === level1)?.level2 ?? [];
-  const visibleFoods = foodLibrary.filter((item) => item.level1 === level1 && item.level2 === level2);
+  const visibleFoods = catalogFoods.filter((item) => item.level1 === level1 && item.level2 === level2);
   const isAiMethod = method !== "manual";
 
   function chooseMethod(nextMethod: UploadMethod) {
@@ -93,7 +106,7 @@ export function UploadSheet({
       status: index === 0 ? "selected" as RecognitionStatus : "queued" as RecognitionStatus,
     }));
     setRecognizedFoods(nextFoods);
-    const firstFood = foodLibrary.find((item) => item.id === nextFoods[0]?.foodId);
+    const firstFood = catalogFoods.find((item) => item.id === nextFoods[0]?.foodId);
     if (firstFood) selectFood(firstFood.id);
   }
 
@@ -148,6 +161,7 @@ export function UploadSheet({
             {isAiMethod && (
               <AiUploadRecognizer
                 method={method}
+                catalogFoods={catalogFoods}
                 recognizedFoods={recognizedFoods}
                 onUpload={() => runMockRecognition(method)}
                 onSelect={selectRecognizedFood}
@@ -158,6 +172,7 @@ export function UploadSheet({
             <CategoryPicker
               level1={level1}
               level2={level2}
+              categoryTree={categoryTree}
               secondLevels={secondLevels}
               visibleFoods={visibleFoods}
               selectedFood={selectedFood}
@@ -181,7 +196,7 @@ export function UploadSheet({
           <div className="uploadFace uploadBack">
             <PackageCheck size={42} />
             <h2>{selectedFood.name} 已进入仓库</h2>
-            <p>根据食材库默认值，已带入储存方式、保质期、数量和价格。现在跳转到仓库检查摆放。</p>
+            <p>已按食材目录带入储存建议和记录方式；实付价格仍以你的本次采购为准。现在跳转到仓库检查摆放。</p>
           </div>
         </div>
       </div>
@@ -191,12 +206,14 @@ export function UploadSheet({
 
 function AiUploadRecognizer({
   method,
+  catalogFoods,
   recognizedFoods,
   onUpload,
   onSelect,
   onToggle,
 }: {
   method: UploadMethod;
+  catalogFoods: FoodInfo[];
   recognizedFoods: RecognizedFood[];
   onUpload: () => void;
   onSelect: (foodId: string) => void;
@@ -234,7 +251,7 @@ function AiUploadRecognizer({
       {recognizedFoods.length > 0 && (
         <div className="recognizedFoodGrid">
           {recognizedFoods.map((item) => {
-            const foodInfo = foodLibrary.find((food) => food.id === item.foodId);
+            const foodInfo = catalogFoods.find((food) => food.id === item.foodId);
             if (!foodInfo) return null;
 
             return (
@@ -260,6 +277,7 @@ function AiUploadRecognizer({
 function CategoryPicker({
   level1,
   level2,
+  categoryTree,
   secondLevels,
   visibleFoods,
   selectedFood,
@@ -269,6 +287,7 @@ function CategoryPicker({
 }: {
   level1: string;
   level2: string;
+  categoryTree: CatalogCategoryView[];
   secondLevels: { name: string; level3: string[] }[];
   visibleFoods: FoodInfo[];
   selectedFood: FoodInfo;
@@ -279,8 +298,8 @@ function CategoryPicker({
   return (
     <div className="categoryBlock">
       <div className="railTags">
-        {categoryTree.map((item) => {
-          const Icon = item.icon;
+        {categoryTree.map((item, index) => {
+          const Icon = categoryIcons[index % categoryIcons.length];
           return (
             <button className={level1 === item.level1 ? "active" : ""} type="button" key={item.level1} onClick={() => chooseLevel1(item.level1)}>
               <Icon size={15} /> {item.level1}
@@ -299,7 +318,8 @@ function CategoryPicker({
         {visibleFoods.map((food) => (
           <button className={selectedFood.id === food.id ? "selected" : ""} type="button" key={food.id} onClick={() => selectFood(food.id)}>
             <FoodImage src={food.photo} alt={food.name} />
-            <strong>{food.level3}</strong>
+            <strong>{food.name}</strong>
+            <span>{food.level3}</span>
             <small>{food.storageTags.join(" / ")}</small>
           </button>
         ))}
@@ -324,36 +344,58 @@ function FoodEditor({
   setAmountMode: (mode: AmountMode) => void;
   amount: number;
   setAmount: (value: number) => void;
-  price: number;
-  setPrice: (value: number) => void;
+  price: number | null;
+  setPrice: (value: number | null) => void;
   note: string;
   setNote: (value: string) => void;
 }) {
-  const maxAmount = amountMode === "count" ? 12 : 1200;
+  const discrete = amountMode === "count" || amountMode === "package";
+  const maxAmount = discrete ? 12 : 1200;
+  const minAmount = discrete ? 1 : 50;
+  const amountStep = discrete ? 1 : 50;
+  const unitLabel = selectedFood.unitLabelsByMode[amountMode] ?? "";
+
+  function chooseAmountMode(mode: AmountMode) {
+    setAmountMode(mode);
+    setAmount(mode === selectedFood.defaultMode
+      ? selectedFood.defaultAmount
+      : mode === "count" || mode === "package" ? 1 : 250);
+  }
+
   return (
     <div className="foodEditor">
       <div className="editorLine">
         <Snowflake size={17} />
         <span>推荐储存</span>
         <strong>{storageText(selectedFood.storage)}</strong>
-        <small>{selectedFood.shelfLifeDays} 天建议期</small>
+        <small>{selectedFood.shelfLifeDays ? `${selectedFood.shelfLifeDays} 天建议期` : "以包装和实际状态为准"}</small>
       </div>
       <div className="editorLine">
         <Scale size={17} />
         <span>记录方式</span>
         <div className="segmented">
-          <button className={amountMode === "count" ? "active" : ""} type="button" onClick={() => setAmountMode("count")}>数量</button>
-          <button className={amountMode === "weight" ? "active" : ""} type="button" onClick={() => setAmountMode("weight")}>克重</button>
+          {selectedFood.supportedModes.map((mode) => (
+            <button className={amountMode === mode ? "active" : ""} type="button" key={mode} onClick={() => chooseAmountMode(mode)}>
+              {amountModeText(mode)}
+            </button>
+          ))}
         </div>
       </div>
       <label className="rangeLine">
-        <span>{amountMode === "count" ? "数量" : "克重"}：{amount}{amountMode === "count" ? selectedFood.unit : "g"}</span>
-        <input type="range" min={amountMode === "count" ? 1 : 50} max={maxAmount} step={amountMode === "count" ? 1 : 50} value={amount} onChange={(event) => setAmount(Number(event.target.value))} />
+        <span>{amountModeText(amountMode)}：{amount}{unitLabel}</span>
+        <input type="range" min={minAmount} max={maxAmount} step={amountStep} value={amount} onChange={(event) => setAmount(Number(event.target.value))} />
       </label>
       <label className="inputLine">
         <CircleDollarSign size={17} />
-        <span>价格</span>
-        <input type="number" min="0" step="0.1" value={price} onChange={(event) => setPrice(Number(event.target.value))} />
+        <span>本次实付</span>
+        <input
+          type="number"
+          min="0"
+          step="0.1"
+          placeholder="未记录"
+          value={price ?? ""}
+          onChange={(event) => setPrice(event.target.value === "" ? null : Number(event.target.value))}
+        />
       </label>
       <label className="inputLine">
         <Tags size={17} />
@@ -390,4 +432,3 @@ function recognitionStatusText(status: RecognitionStatus) {
     ignored: "跳过",
   }[status];
 }
-

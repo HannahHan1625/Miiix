@@ -1,4 +1,4 @@
-import { foodLibrary, initialInventory, kitchenTools, recipesSeed } from "../data/catalog";
+import { initialInventory, kitchenTools, recipesSeed } from "../data/catalog";
 import type {
   CatalogRepository,
   CreateInventoryLotInput,
@@ -14,18 +14,22 @@ import {
   type DiaryEntry,
 } from "../domain/diary";
 import type { InventoryLot, JsonValue, MealPlanRecord, RecipeDocument } from "../domain/persistence";
-import type { InventoryItem, StorageZone, UploadMethod } from "../domain/inventory";
+import type { AmountMode, FoodInfo, InventoryItem, StorageZone, UploadMethod } from "../domain/inventory";
 import { createMealPlan, type MealPlan, type ShoppingLine } from "../domain/plan";
+import type { Recipe } from "../domain/recipe";
 import {
-  recipeMainIngredients,
-  type Recipe,
-} from "../domain/recipe";
+  loadCatalogFoodProjection,
+  loadCatalogViewProjection,
+  type CatalogCategoryView,
+} from "./catalogView";
 
 export const LOCAL_USER_ID = "local-demo-user";
 const SEED_VERSION = 1;
 const SEED_META_KEY = "demo-seed-version";
 
 export type KitchenSnapshot = {
+  catalogFoods: FoodInfo[];
+  catalogCategories: CatalogCategoryView[];
   inventory: InventoryItem[];
   savedRecipes: Recipe[];
   favorites: string[];
@@ -47,11 +51,12 @@ type SeedableRepositoryProvider = RepositoryProvider & {
 };
 
 type CatalogReferences = {
-  unitIds: {
-    count: string;
-    weight: string;
-  };
+  unitIds: Record<AmountMode, string>;
+  unitModeById: Record<string, AmountMode>;
+  unitLabelById: Record<string, string>;
+  unitBaseFactorById: Record<string, number>;
   storageMethodIds: Record<StorageZone, string>;
+  storageZoneById: Record<string, StorageZone>;
 };
 
 export async function initializeKitchenState(provider: SeedableRepositoryProvider) {
@@ -64,9 +69,20 @@ export async function initializeKitchenState(provider: SeedableRepositoryProvide
 }
 
 export async function loadKitchenState(provider: RepositoryProvider): Promise<KitchenSnapshot> {
-  const references = await resolveCatalogReferences(provider.repositories.catalog);
-  const { inventory, recipes, favorites, diarySessions, planRecord } = await loadCoreRecords(provider, references);
-  const recipeById = new Map(recipes.map((bundle) => [bundle.recipe.id, recipeBundleToRecipe(bundle)]));
+  const [references, catalogView] = await Promise.all([
+    resolveCatalogReferences(provider.repositories.catalog),
+    loadCatalogViewProjection(provider.repositories.catalog),
+  ]);
+  const { foodById } = catalogView;
+  const { inventory, recipes, favorites, diarySessions, planRecord } = await loadCoreRecords(
+    provider,
+    references,
+    foodById,
+  );
+  const recipeById = new Map(recipes.map((bundle) => [
+    bundle.recipe.id,
+    recipeBundleToRecipe(bundle, foodById),
+  ]));
   const diary = diarySessions.map((session) => {
     const recipe = recipeById.get(session.recipeId);
     const metadata = asObject(session.metadata);
@@ -79,9 +95,13 @@ export async function loadKitchenState(provider: RepositoryProvider): Promise<Ki
       cuisine: asString(metadata.cuisine) ?? "家常",
       difficulty: "轻松",
       minutes: 15,
-      calories: 0,
+      calories: null,
       image: "",
-      required: consumed.map((item) => item.name),
+      ingredients: consumed.map((item) => ({
+        ingredientId: item.inventoryId,
+        name: item.name,
+        role: "main" as const,
+      })),
       toolId: tool.id,
       reason: "从制作记录恢复。",
       steps: [],
@@ -96,12 +116,14 @@ export async function loadKitchenState(provider: RepositoryProvider): Promise<Ki
     };
   });
 
-  const todayPlan = planRecord ? await restoreMealPlan(provider, planRecord, recipeById) : null;
+  const todayPlan = planRecord ? await restoreMealPlan(provider, planRecord, recipeById, foodById) : null;
   const shoppingList = planRecord
-    ? await restoreShoppingList(provider, planRecord.id, planRecord.metadata)
+    ? await restoreShoppingList(provider, planRecord.id, planRecord.metadata, foodById)
     : [];
 
   return {
+    catalogFoods: catalogView.foods,
+    catalogCategories: catalogView.categoryTree,
     inventory,
     savedRecipes: Array.from(recipeById.values()).filter((recipe) => !recipesSeed.some((seed) => seed.id === recipe.id)),
     favorites,
@@ -117,7 +139,10 @@ export async function addInventoryItems(
   items: InventoryItem[],
   method: UploadMethod,
 ) {
-  const references = await resolveCatalogReferences(provider.repositories.catalog);
+  const [references, foodById] = await Promise.all([
+    resolveCatalogReferences(provider.repositories.catalog),
+    loadCatalogFoodProjection(provider.repositories.catalog),
+  ]);
   await provider.transaction(async (repositories) => {
     for (const item of items) {
       await repositories.inventory.createLot(inventoryItemToLotInput(item, method, references));
@@ -131,9 +156,9 @@ export async function setRecipeFavorite(
   recipe: Recipe,
   favorite: boolean,
 ) {
-  const references = await resolveCatalogReferences(provider.repositories.catalog);
+  const foodById = await loadCatalogFoodProjection(provider.repositories.catalog);
   await provider.transaction(async (repositories) => {
-    await repositories.recipes.saveRecipe(recipeToSaveInput(recipe, references));
+    await repositories.recipes.saveRecipe(recipeToSaveInput(recipe, foodById));
     await repositories.recipes.setFavorite(LOCAL_USER_ID, recipe.id, favorite);
   });
 }
@@ -147,13 +172,16 @@ export async function saveTodayPlan(
 ) {
   const draft = createMealPlan(recipe, source, inventory, todayISO(), selectedInventoryIds);
   const shoppingLines = draft.shoppingList;
-  const references = await resolveCatalogReferences(provider.repositories.catalog);
+  const [references, foodById] = await Promise.all([
+    resolveCatalogReferences(provider.repositories.catalog),
+    loadCatalogFoodProjection(provider.repositories.catalog),
+  ]);
   const planRecord = await provider.transaction(async (repositories) => {
     const existing = await repositories.planning.getMealPlan(LOCAL_USER_ID, todayISO());
     if (existing) {
       await repositories.planning.updateMealPlanStatus(LOCAL_USER_ID, existing.id, "cancelled");
     }
-    await repositories.recipes.saveRecipe(recipeToSaveInput(recipe, references, inventory));
+    await repositories.recipes.saveRecipe(recipeToSaveInput(recipe, foodById, inventory));
     const created = await repositories.planning.createMealPlan({
       userId: LOCAL_USER_ID,
       plannedDate: todayISO(),
@@ -170,13 +198,17 @@ export async function saveTodayPlan(
       `《${recipe.title}》购物清单`,
     );
     const structuredItems = shoppingLines.flatMap((line) => {
-      const food = foodLibrary.find((item) => item.name === line.name);
-      if (!food || line.name === "库存已覆盖全部食材") return [];
+      const food = line.ingredientId
+        ? foodById.get(line.ingredientId)
+        : null;
+      if (!food) return [];
       return [{
         ingredientId: food.id,
-        requiredQuantity: food.defaultMode === "weight" ? Math.min(food.defaultWeight, 200) : 1,
+        requiredQuantity: food.defaultMode === "mass" || food.defaultMode === "volume"
+          ? Math.min(food.defaultAmount, 200)
+          : 1,
         ownedQuantity: line.owned ? 1 : 0,
-        unitId: food.defaultMode === "weight" ? references.unitIds.weight : references.unitIds.count,
+        unitId: food.defaultUnitId,
         reason: line.reason,
         status: line.owned ? "skipped" as const : "needed" as const,
       }];
@@ -200,10 +232,13 @@ export async function completeCookingAndConsume(
 ): Promise<CookingCompletion> {
   let consumed: ConsumedInventoryItem[] = [];
   let alreadyCompleted = false;
-  const references = await resolveCatalogReferences(provider.repositories.catalog);
+  const [references, foodById] = await Promise.all([
+    resolveCatalogReferences(provider.repositories.catalog),
+    loadCatalogFoodProjection(provider.repositories.catalog),
+  ]);
 
   await provider.transaction(async (repositories) => {
-    await repositories.recipes.saveRecipe(recipeToSaveInput(plan.recipe, references));
+    await repositories.recipes.saveRecipe(recipeToSaveInput(plan.recipe, foodById));
     const session = await repositories.cooking.startSession({
       userId: LOCAL_USER_ID,
       recipeId: plan.recipe.id,
@@ -219,9 +254,12 @@ export async function completeCookingAndConsume(
     const availableLots = await repositories.inventory.listAvailableLots(LOCAL_USER_ID);
     const targetLots = selectLotsForCooking(availableLots, plan);
     for (const lot of targetLots) {
-      const food = foodLibrary.find((item) => item.id === lot.ingredientId);
+      const food = foodById.get(lot.ingredientId);
       if (!food) continue;
-      const quantity = consumptionQuantity(lot, food.storage === "seasoning", references);
+      const condiment = plan.recipe.ingredients.some(
+        (ingredient) => ingredient.ingredientId === lot.ingredientId && ingredient.role === "seasoning",
+      );
+      const quantity = consumptionQuantity(lot, condiment, references);
       if (quantity <= 0) continue;
       const transaction = await repositories.inventory.appendTransaction({
         userId: LOCAL_USER_ID,
@@ -242,7 +280,7 @@ export async function completeCookingAndConsume(
         inventoryId: lot.id,
         name: food.name,
         quantity: transaction.quantity,
-        unit: lot.unitId === references.unitIds.weight ? "g" : food.unit,
+        unit: references.unitLabelById[lot.unitId] ?? "",
         remaining: updatedLot?.quantityRemaining ?? 0,
       });
     }
@@ -271,10 +309,13 @@ export async function completeCookingAndConsume(
 }
 
 async function seedLocalDemoData(provider: RepositoryProvider) {
-  const references = await resolveCatalogReferences(provider.repositories.catalog);
+  const [references, foodById] = await Promise.all([
+    resolveCatalogReferences(provider.repositories.catalog),
+    loadCatalogFoodProjection(provider.repositories.catalog),
+  ]);
   await provider.transaction(async (repositories) => {
     for (const recipe of recipesSeed) {
-      await repositories.recipes.saveRecipe(recipeToSaveInput(recipe, references, initialInventory));
+      await repositories.recipes.saveRecipe(recipeToSaveInput(recipe, foodById, initialInventory));
     }
     for (const item of initialInventory) {
       await repositories.inventory.createLot(inventoryItemToLotInput(item, "manual", references));
@@ -302,7 +343,11 @@ async function seedLocalDemoData(provider: RepositoryProvider) {
   });
 }
 
-async function loadCoreRecords(provider: RepositoryProvider, references: CatalogReferences) {
+async function loadCoreRecords(
+  provider: RepositoryProvider,
+  references: CatalogReferences,
+  foodById: Map<string, FoodInfo>,
+) {
   const [lots, recipes, favorites, diarySessions, planRecord] = await Promise.all([
     provider.repositories.inventory.listAvailableLots(LOCAL_USER_ID),
     provider.repositories.recipes.listPublishedRecipes(),
@@ -311,7 +356,7 @@ async function loadCoreRecords(provider: RepositoryProvider, references: Catalog
     provider.repositories.planning.getMealPlan(LOCAL_USER_ID, todayISO()),
   ]);
   return {
-    inventory: lots.flatMap((lot) => lotToInventoryItem(lot, references)),
+    inventory: lots.flatMap((lot) => lotToInventoryItem(lot, references, foodById)),
     recipes,
     favorites,
     diarySessions,
@@ -320,20 +365,24 @@ async function loadCoreRecords(provider: RepositoryProvider, references: Catalog
 }
 
 async function loadInventory(provider: RepositoryProvider, references: CatalogReferences) {
-  const lots = await provider.repositories.inventory.listAvailableLots(LOCAL_USER_ID);
-  return lots.flatMap((lot) => lotToInventoryItem(lot, references));
+  const [lots, foodById] = await Promise.all([
+    provider.repositories.inventory.listAvailableLots(LOCAL_USER_ID),
+    loadCatalogFoodProjection(provider.repositories.catalog),
+  ]);
+  return lots.flatMap((lot) => lotToInventoryItem(lot, references, foodById));
 }
 
 async function restoreMealPlan(
   provider: RepositoryProvider,
   record: MealPlanRecord,
   recipeById: Map<string, Recipe>,
+  foodById: Map<string, FoodInfo>,
 ) {
   const recipeId = record.recipeIds[0];
   let recipe = recipeById.get(recipeId);
   if (!recipe) {
     const bundle = await provider.repositories.recipes.getRecipe(recipeId);
-    if (bundle) recipe = recipeBundleToRecipe(bundle);
+    if (bundle) recipe = recipeBundleToRecipe(bundle, foodById);
   }
   if (!recipe) return null;
   return {
@@ -349,6 +398,7 @@ async function restoreShoppingList(
   provider: RepositoryProvider,
   planId: string,
   metadata: Record<string, JsonValue>,
+  foodById: Map<string, FoodInfo>,
 ) {
   const storedLines = parseShoppingLines(metadata.shoppingLines);
   if (storedLines.length) return storedLines;
@@ -357,6 +407,7 @@ async function restoreShoppingList(
   if (!bundle.items.length) {
     return [{
       id: `${planId}-covered`,
+      ingredientId: null,
       name: "库存已覆盖全部食材",
       reason: "无需额外采购",
       owned: false,
@@ -364,7 +415,8 @@ async function restoreShoppingList(
   }
   return bundle.items.map((item) => ({
     id: item.id,
-    name: foodLibrary.find((food) => food.id === item.ingredientId)?.name ?? item.ingredientId,
+    ingredientId: item.ingredientId,
+    name: foodById.get(item.ingredientId)?.name ?? item.ingredientId,
     reason: item.reason ?? bundle.list.title,
     owned: item.ownedQuantity >= item.requiredQuantity,
   }));
@@ -376,18 +428,19 @@ function inventoryItemToLotInput(
   references: CatalogReferences,
 ): CreateInventoryLotInput {
   const purchasedAt = new Date(Date.now() - item.addedDaysAgo * 86_400_000);
-  const expiresAt = new Date(purchasedAt);
-  expiresAt.setDate(expiresAt.getDate() + item.shelfLifeDays);
+  const expiresAt = item.shelfLifeDays
+    ? new Date(purchasedAt.getTime() + item.shelfLifeDays * 86_400_000)
+    : null;
   return {
     userId: LOCAL_USER_ID,
     ingredientId: item.id,
     quantityInitial: item.amount,
-    unitId: item.amountMode === "weight" ? references.unitIds.weight : references.unitIds.count,
+    unitId: item.unitIdsByMode[item.amountMode] ?? item.defaultUnitId,
     storageMethodId: references.storageMethodIds[item.storage],
     storageLocation: item.storage,
     purchasedAt: purchasedAt.toISOString(),
     openedAt: null,
-    expiresAt: expiresAt.toISOString(),
+    expiresAt: expiresAt?.toISOString() ?? null,
     priceAmount: item.pricePaid,
     currency: "CNY",
     recognitionJobId: null,
@@ -397,29 +450,51 @@ function inventoryItemToLotInput(
   };
 }
 
-function lotToInventoryItem(lot: InventoryLot, references: CatalogReferences): InventoryItem[] {
-  const food = foodLibrary.find((item) => item.id === lot.ingredientId);
+function lotToInventoryItem(
+  lot: InventoryLot,
+  references: CatalogReferences,
+  foodById: Map<string, FoodInfo>,
+): InventoryItem[] {
+  const food = foodById.get(lot.ingredientId);
   if (!food) return [];
   const purchasedAt = lot.purchasedAt ? new Date(lot.purchasedAt).getTime() : new Date(lot.createdAt).getTime();
   const addedDaysAgo = Math.max(0, Math.floor((Date.now() - purchasedAt) / 86_400_000));
+  const amountMode = references.unitModeById[lot.unitId] ?? food.defaultMode;
+  const shelfLifeDays = lot.expiresAt
+    ? Math.max(1, Math.ceil((new Date(lot.expiresAt).getTime() - purchasedAt) / 86_400_000))
+    : null;
   return [{
     ...food,
+    storage: lot.storageMethodId
+      ? references.storageZoneById[lot.storageMethodId] ?? food.storage
+      : food.storage,
+    shelfLifeDays,
     inventoryId: lot.id,
-    amountMode: lot.unitId === references.unitIds.weight ? "weight" : "count",
+    amountMode,
     amount: lot.quantityRemaining,
-    pricePaid: lot.priceAmount ?? food.price,
+    unitIdsByMode: { ...food.unitIdsByMode, [amountMode]: lot.unitId },
+    unitLabelsByMode: {
+      ...food.unitLabelsByMode,
+      [amountMode]: references.unitLabelById[lot.unitId] ?? food.unitLabelsByMode[amountMode],
+    },
+    unitBaseFactorsByMode: {
+      ...food.unitBaseFactorsByMode,
+      [amountMode]: references.unitBaseFactorById[lot.unitId] ?? food.unitBaseFactorsByMode[amountMode] ?? 1,
+    },
+    pricePaid: lot.priceAmount,
     note: lot.note ?? "",
     addedDaysAgo,
     customTags: lot.customTags,
+    expiresAtISO: lot.expiresAt,
   }];
 }
 
 function recipeToSaveInput(
   recipe: Recipe,
-  references: CatalogReferences,
+  foodById: Map<string, FoodInfo>,
   inventory: InventoryItem[] = [],
 ): SaveRecipeInput {
-  const mainNames = new Set(recipeMainIngredients(recipe));
+  const sourceType = recipesSeed.some((seed) => seed.id === recipe.id) ? "curated" : "generated";
   return {
     id: recipe.id,
     slug: recipe.id,
@@ -428,25 +503,29 @@ function recipeToSaveInput(
     difficulty: difficultyToRecord(recipe.difficulty),
     minutes: recipe.minutes,
     servings: 1,
-    caloriesKcal: recipe.calories,
+    caloriesKcal: sourceType === "curated" ? recipe.calories : null,
     imageUri: recipe.image,
-    sourceType: recipesSeed.some((seed) => seed.id === recipe.id) ? "curated" : "generated",
+    sourceType,
     status: "published",
     metadata: {
-      required: recipe.required,
+      ingredientSnapshot: recipe.ingredients.map((ingredient) => ({
+        ingredientId: ingredient.ingredientId,
+        name: ingredient.name,
+        role: ingredient.role,
+      })),
       reason: recipe.reason,
       difficultyZh: recipe.difficulty,
       toolId: recipe.toolId,
     },
-    ingredients: recipe.required.flatMap((name, index) => {
-      const food = foodLibrary.find((item) => item.name === name);
+    ingredients: recipe.ingredients.flatMap((ingredient, index) => {
+      const food = foodById.get(ingredient.ingredientId);
       if (!food) return [];
       const inventoryItem = inventory.find((item) => item.id === food.id);
       return [{
         ingredientId: food.id,
-        role: mainNames.has(name) ? "main" as const : "seasoning" as const,
+        role: ingredient.role,
         quantity: inventoryItem ? consumptionQuantityForItem(inventoryItem) : null,
-        unitId: food.defaultMode === "weight" ? references.unitIds.weight : references.unitIds.count,
+        unitId: inventoryItem?.unitIdsByMode[inventoryItem.amountMode] ?? food.defaultUnitId,
         preparation: null,
         substitutionGroup: null,
         sortOrder: index,
@@ -462,20 +541,26 @@ function recipeToSaveInput(
   };
 }
 
-function recipeBundleToRecipe(bundle: RecipeBundle) {
+function recipeBundleToRecipe(bundle: RecipeBundle, foodById: Map<string, FoodInfo>) {
   const metadata = asObject(bundle.recipe.metadata);
-  const required = asStringArray(metadata.required);
+  const ingredientSnapshot = parseRecipeIngredientSnapshot(metadata.ingredientSnapshot);
+  const ingredientById = new Map(ingredientSnapshot.map((item) => [item.ingredientId, item]));
   return {
     id: bundle.recipe.id,
     title: bundle.recipe.title,
     cuisine: bundle.recipe.cuisineCode ?? "家常",
     difficulty: recordToDifficulty(bundle.recipe),
     minutes: bundle.recipe.minutes,
-    calories: bundle.recipe.caloriesKcal ?? 0,
+    calories: bundle.recipe.sourceType === "generated" ? null : bundle.recipe.caloriesKcal,
     image: bundle.recipe.imageUri ?? "",
-    required: required.length
-      ? required
-      : bundle.ingredients.map((line) => foodLibrary.find((food) => food.id === line.ingredientId)?.name ?? line.ingredientId),
+    ingredients: bundle.ingredients.map((line) => {
+      const snapshot = ingredientById.get(line.ingredientId);
+      return {
+        ingredientId: line.ingredientId,
+        name: snapshot?.name ?? foodById.get(line.ingredientId)?.name ?? line.ingredientId,
+        role: line.role,
+      };
+    }),
     toolId: asString(metadata.toolId) ?? bundle.toolIds[0] ?? "wok",
     reason: asString(metadata.reason) ?? "从已保存的菜谱恢复。",
     steps: bundle.steps.map((step) => step.instruction),
@@ -486,26 +571,34 @@ function selectLotsForCooking(lots: InventoryLot[], plan: MealPlan) {
   const selected = new Set(plan.selectedInventoryIds);
   if (selected.size) return lots.filter((lot) => selected.has(lot.id));
 
-  const requiredNames = new Set(recipeMainIngredients(plan.recipe));
+  const requiredIngredientIds = new Set(
+    plan.recipe.ingredients
+      .filter((ingredient) => ingredient.role === "main")
+      .map((ingredient) => ingredient.ingredientId),
+  );
   const chosenIngredients = new Set<string>();
   return lots.filter((lot) => {
-    const food = foodLibrary.find((item) => item.id === lot.ingredientId);
-    if (!food || !requiredNames.has(food.name) || chosenIngredients.has(food.id)) return false;
-    chosenIngredients.add(food.id);
+    if (!requiredIngredientIds.has(lot.ingredientId) || chosenIngredients.has(lot.ingredientId)) return false;
+    chosenIngredients.add(lot.ingredientId);
     return true;
   });
 }
 
 function consumptionQuantity(lot: InventoryLot, condiment: boolean, references: CatalogReferences) {
-  if (lot.unitId === references.unitIds.weight) {
-    return Math.min(lot.quantityRemaining, condiment ? 10 : 125);
+  const mode = references.unitModeById[lot.unitId];
+  if (mode === "mass" || mode === "volume") {
+    const baseFactor = references.unitBaseFactorById[lot.unitId] ?? 1;
+    return Math.min(lot.quantityRemaining, (condiment ? 10 : 125) / baseFactor);
   }
   return Math.min(lot.quantityRemaining, condiment ? 0.1 : 1);
 }
 
 function consumptionQuantityForItem(item: InventoryItem) {
-  if (item.amountMode === "weight") return Math.min(item.amount, item.storage === "seasoning" ? 10 : 125);
-  return Math.min(item.amount, item.storage === "seasoning" ? 0.1 : 1);
+  if (item.amountMode === "mass" || item.amountMode === "volume") {
+    const baseFactor = item.unitBaseFactorsByMode[item.amountMode] ?? 1;
+    return Math.min(item.amount, (item.kind === "condiment" ? 10 : 125) / baseFactor);
+  }
+  return Math.min(item.amount, item.kind === "condiment" ? 0.1 : 1);
 }
 
 function createConsumptionNote(consumed: ConsumedInventoryItem[], source: string) {
@@ -525,7 +618,7 @@ function recordToDifficulty(recipe: RecipeDocument): Recipe["difficulty"] {
 }
 
 function shoppingLineToJson(line: ShoppingLine): Record<string, JsonValue> {
-  return { id: line.id, name: line.name, reason: line.reason, owned: line.owned };
+  return { id: line.id, ingredientId: line.ingredientId, name: line.name, reason: line.reason, owned: line.owned };
 }
 
 function consumedItemToJson(item: ConsumedInventoryItem): Record<string, JsonValue> {
@@ -546,7 +639,23 @@ function parseShoppingLines(value: JsonValue | undefined): ShoppingLine[] {
     const name = asString(record.name);
     const reason = asString(record.reason);
     if (!id || !name || !reason || typeof record.owned !== "boolean") return [];
-    return [{ id, name, reason, owned: record.owned }];
+    return [{ id, ingredientId: asString(record.ingredientId), name, reason, owned: record.owned }];
+  });
+}
+
+function parseRecipeIngredientSnapshot(value: JsonValue | undefined) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const record = asObject(item);
+    const ingredientId = asString(record.ingredientId);
+    const name = asString(record.name);
+    const role = asString(record.role);
+    if (!ingredientId || !name || !role || !["main", "seasoning", "optional", "garnish"].includes(role)) return [];
+    return [{
+      ingredientId,
+      name,
+      role: role as "main" | "seasoning" | "optional" | "garnish",
+    }];
   });
 }
 
@@ -585,17 +694,27 @@ async function resolveCatalogReferences(catalog: CatalogRepository): Promise<Cat
   const storageMethodId = (codes: string[], label: string) =>
     requireCatalogId(storageMethods, codes, `storage:${label}`);
 
+  const storageMethodIds: Record<StorageZone, string> = {
+    fridge: storageMethodId(["refrigerated", "fridge"], "fridge"),
+    freezer: storageMethodId(["frozen", "freezer"], "freezer"),
+    room: storageMethodId(["room_temperature", "room"], "room"),
+    dryDark: storageMethodId(["dry_dark", "seasoning", "cool_dark"], "dry-dark"),
+  };
+
   return {
     unitIds: {
       count: unitId("piece"),
-      weight: unitId("g"),
+      mass: unitId("g"),
+      volume: unitId("ml"),
+      package: unitId("package"),
     },
-    storageMethodIds: {
-      fridge: storageMethodId(["refrigerated", "fridge"], "fridge"),
-      freezer: storageMethodId(["frozen", "freezer"], "freezer"),
-      room: storageMethodId(["room_temperature", "room"], "room"),
-      seasoning: storageMethodId(["dry_dark", "seasoning", "cool_dark"], "seasoning"),
-    },
+    unitModeById: Object.fromEntries(units.map((unit) => [unit.id, unit.dimension as AmountMode])),
+    unitLabelById: Object.fromEntries(units.map((unit) => [unit.id, unit.nameZh])),
+    unitBaseFactorById: Object.fromEntries(units.map((unit) => [unit.id, unit.baseFactor ?? 1])),
+    storageMethodIds,
+    storageZoneById: Object.fromEntries(
+      Object.entries(storageMethodIds).map(([zone, id]) => [id, zone as StorageZone]),
+    ),
   };
 }
 

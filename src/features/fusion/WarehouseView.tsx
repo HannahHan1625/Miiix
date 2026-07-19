@@ -12,7 +12,7 @@ import {
 import { useState, type CSSProperties } from "react";
 import { FoodImage, RecipeMeta } from "../../components/ui";
 import { fallbackImage, foodPreferences, kitchenTools, recipeImages } from "../../data/catalog";
-import { freshnessCopy, type InventoryItem } from "../../domain/inventory";
+import { freshnessCopy, type FoodInfo, type InventoryItem } from "../../domain/inventory";
 import {
   recipeMainIngredients,
   recipeSeasonings,
@@ -23,9 +23,18 @@ import {
 import type { ShoppingLine } from "../../domain/plan";
 
 type FusionTray = "ingredients" | "tools" | "preferences";
+const SUPPORT_INGREDIENT_IDS = {
+  lemon: "50000000-0000-4000-8000-000000000018",
+  milk: "50000000-0000-4000-8000-000000000021",
+  oil: "50000000-0000-4000-8000-000000000027",
+  salt: "50000000-0000-4000-8000-000000000028",
+  soySauce: "50000000-0000-4000-8000-000000000029",
+  sugar: "50000000-0000-4000-8000-000000000030",
+} as const;
 
 export function WarehouseView({
   inventory,
+  catalogFoods,
   activeToolId,
   setActiveToolId,
   favorites,
@@ -34,6 +43,7 @@ export function WarehouseView({
   planToday,
 }: {
   inventory: InventoryItem[];
+  catalogFoods: FoodInfo[];
   activeToolId: string;
   setActiveToolId: (id: string) => void;
   favorites: string[];
@@ -51,7 +61,7 @@ export function WarehouseView({
   const selectedItems = selectedInventoryIds
     .map((id) => inventory.find((item) => item.inventoryId === id))
     .filter((item): item is InventoryItem => Boolean(item));
-  const fusionRecipe = buildFusionRecipe(selectedItems, selectedTool, selectedPreference, fusionCount);
+  const fusionRecipe = buildFusionRecipe(selectedItems, catalogFoods, selectedTool, selectedPreference, fusionCount);
   const hasSelection = selectedItems.length > 0;
 
   function toggleIngredient(inventoryId: string) {
@@ -333,7 +343,7 @@ function FusionResultPopup({
                   </div>
                   <div>
                     <span>卡路里</span>
-                    <strong>{recipe.calories} kcal</strong>
+                    <strong>{recipe.calories === null ? "待确认" : `${recipe.calories} kcal`}</strong>
                   </div>
                 </div>
                 <ol className="tutorialSteps">
@@ -356,22 +366,33 @@ function FusionResultPopup({
 
 function buildFusionRecipe(
   selectedItems: InventoryItem[],
+  catalogFoods: FoodInfo[],
   selectedTool: KitchenTool,
   selectedPreference: FoodPreference,
   fusionCount: number,
 ): Recipe {
   const names = selectedItems.map((item) => item.name);
-  const hasFruit = selectedItems.some((item) => item.level1 === "水果");
-  const hasProtein = selectedItems.some((item) => item.level1 === "肉禽蛋品" || item.level1 === "豆制品" || item.level1 === "海鲜水产");
-  const hasVegetable = selectedItems.some((item) => item.level1 === "蔬菜");
+  const hasFruit = selectedItems.some((item) => item.level2 === "水果");
+  const hasProtein = selectedItems.some((item) => item.level1 === "肉禽蛋奶豆及水产");
+  const hasVegetable = selectedItems.some((item) => item.level2 === "蔬菜");
   const title = fusionTitle(names, selectedTool, selectedPreference, hasFruit, hasProtein, hasVegetable);
-  const baseCalories = selectedItems.reduce((sum, item) => {
-    const estimatedWeight = item.amountMode === "weight" ? item.amount : Math.max(item.amount, 1) * Math.max(item.defaultWeight / Math.max(item.defaultCount, 1), 80);
-    return sum + (estimatedWeight / 100) * item.caloriesPer100g;
-  }, 0);
   const toolExtraMinutes =
     selectedTool.id === "oven" ? 8 : selectedTool.id === "steamer" ? 4 : selectedTool.id === "coffee" ? 3 : selectedTool.id === "soyMilk" ? 12 : 0;
-  const required = Array.from(new Set([...names, ...fusionSupportIngredients(selectedTool, selectedPreference, hasFruit)]));
+  const mainIngredients = selectedItems.map((item) => ({
+    ingredientId: item.id,
+    name: item.name,
+    role: "main" as const,
+  }));
+  const seasoningIngredients = fusionSupportIngredientIds(selectedTool, selectedPreference, hasFruit)
+    .flatMap((ingredientId) => {
+      const food = catalogFoods.find((item) => item.id === ingredientId);
+      return food
+        ? [{ ingredientId: food.id, name: food.name, role: "seasoning" as const }]
+        : [];
+    });
+  const ingredients = Array.from(
+    new Map([...mainIngredients, ...seasoningIngredients].map((item) => [item.ingredientId, item])).values(),
+  );
 
   return {
     id: `fusion-${selectedTool.id}-${selectedPreference.id}-${names.join("-")}-${fusionCount}`,
@@ -379,9 +400,11 @@ function buildFusionRecipe(
     cuisine: selectedPreference.cuisine,
     difficulty: selectedPreference.difficulty,
     minutes: selectedPreference.minutes + toolExtraMinutes + Math.min(selectedItems.length * 2, 8),
-    calories: Math.max(80, Math.round(baseCalories * selectedPreference.calorieBias)),
+    // A generated recipe has no reviewed seasoning quantities or count-to-mass
+    // conversions, so an exact calorie total would turn missing facts into a number.
+    calories: null,
     image: hasFruit ? recipeImages.peachDrink : selectedTool.id === "steamer" ? recipeImages.steamedEgg : recipeImages.eggplantRice,
-    required,
+    ingredients,
     toolId: selectedTool.id,
     reason: `${names.join("、")} 经过 ${selectedTool.name} 和「${selectedPreference.label}」偏好融合，优先解决今天吃什么。`,
     steps: fusionSteps(selectedTool, selectedPreference, hasFruit, hasProtein, hasVegetable),
@@ -407,23 +430,31 @@ function fusionTitle(
   return `${coreNames}${hasProtein ? "一人主菜" : "灵感小食"}`;
 }
 
-function fusionSupportIngredients(selectedTool: KitchenTool, selectedPreference: FoodPreference, hasFruit: boolean) {
-  if (selectedTool.id === "juicer" || selectedTool.id === "coffee") return hasFruit ? ["柠檬", "蜂蜜"] : ["牛奶", "冰块"];
-  if (selectedTool.id === "soyMilk") return ["清水", "少量糖"];
-  if (selectedPreference.id === "zhejiang") return ["生抽", "少量糖"];
-  if (selectedPreference.id === "fresh") return ["柠檬", "橄榄油"];
-  return ["生抽"];
+function fusionSupportIngredientIds(selectedTool: KitchenTool, selectedPreference: FoodPreference, hasFruit: boolean) {
+  if (selectedTool.id === "juicer" || selectedTool.id === "coffee") {
+    return hasFruit
+      ? [SUPPORT_INGREDIENT_IDS.lemon, SUPPORT_INGREDIENT_IDS.sugar]
+      : [SUPPORT_INGREDIENT_IDS.milk, SUPPORT_INGREDIENT_IDS.sugar];
+  }
+  if (selectedTool.id === "soyMilk") return [SUPPORT_INGREDIENT_IDS.sugar];
+  if (selectedTool.id === "oven") return [SUPPORT_INGREDIENT_IDS.oil, SUPPORT_INGREDIENT_IDS.salt];
+  if (selectedTool.id === "steamer") return [SUPPORT_INGREDIENT_IDS.soySauce];
+  if (selectedPreference.id === "zhejiang") return [SUPPORT_INGREDIENT_IDS.soySauce, SUPPORT_INGREDIENT_IDS.sugar];
+  if (selectedPreference.id === "fresh") {
+    return [SUPPORT_INGREDIENT_IDS.lemon, SUPPORT_INGREDIENT_IDS.oil, SUPPORT_INGREDIENT_IDS.salt];
+  }
+  return [SUPPORT_INGREDIENT_IDS.soySauce];
 }
 
 function fusionSteps(selectedTool: KitchenTool, selectedPreference: FoodPreference, hasFruit: boolean, hasProtein: boolean, hasVegetable: boolean) {
   if (selectedTool.id === "juicer" || selectedTool.id === "coffee") {
-    return ["食材清洗后切小块。", "保留一点果肉做层次，其余打碎或萃取。", "按酸甜度补柠檬或蜂蜜。", "冷藏 5 分钟后饮用。"];
+    return ["食材清洗后切小块。", "保留一点果肉做层次，其余打碎或萃取。", "按酸甜度补柠檬或白砂糖。", "冷藏 5 分钟后饮用。"];
   }
   if (selectedTool.id === "soyMilk") {
     return ["把食材切小，避开太硬或筋膜多的部分。", "加入清水到建议水位，选择浓汤或豆浆模式。", "完成后按口味补少量糖或盐。", "倒出后静置 2 分钟，让口感更顺。"];
   }
   if (selectedTool.id === "steamer") {
-    return ["主料切成容易入口的大小。", "蛋液或清汤作为底味。", "中火蒸到刚熟，避免过老。", "出锅后补生抽或香油。"];
+    return ["主料切成容易入口的大小。", "蛋液或清汤作为底味。", "中火蒸到刚熟，避免过老。", "出锅后补少量生抽。"];
   }
   if (selectedTool.id === "oven") {
     return ["食材擦干水分后铺平。", "用少量油和盐做基础调味。", "烤到边缘上色。", "出炉后按偏好补酸甜或香草。"];
@@ -446,4 +477,3 @@ function orbitStyle(index: number, total: number): CSSProperties {
     "--y": `${Math.sin(angle) * radiusY}px`,
   } as CSSProperties;
 }
-

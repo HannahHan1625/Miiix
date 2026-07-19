@@ -192,7 +192,7 @@ export function DiaryView({
               <strong>{item.name}</strong>
               <small>{amountText(item)} · {storageText(item.storage)}</small>
             </div>
-            <b>+{item.pricePaid.toFixed(1)}</b>
+            <b>{item.pricePaid === null ? "金额未记录" : `+${item.pricePaid.toFixed(1)}`}</b>
           </article>
         ))}
         {selectedExpense.map((entry) => (
@@ -218,4 +218,3 @@ export function DiaryView({
     </section>
   );
 }
-

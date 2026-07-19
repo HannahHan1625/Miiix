@@ -6,21 +6,21 @@ import type { Recipe } from "../domain/recipe";
 export function RecipeMeta({ recipe }: { recipe: Recipe }) {
   return (
     <div className="recipeMeta">
-      <span><ClipboardList size={13} /> {recipe.required.length} 种食材</span>
+      <span><ClipboardList size={13} /> {recipe.ingredients.length} 种食材</span>
       <span><Timer size={13} /> {recipe.minutes} 分钟</span>
       <span>{recipe.difficulty}</span>
       <span>{recipe.cuisine}</span>
-      <span>{recipe.calories} kcal</span>
+      <span>{recipe.calories === null ? "热量待确认" : `${recipe.calories} kcal`}</span>
     </div>
   );
 }
 
-export function Metric({ label, value, suffix }: { label: string; value: number; suffix: string }) {
+export function Metric({ label, value, suffix }: { label: string; value: number | null; suffix: string }) {
   return (
     <div className="metricCard">
       <span>{label}</span>
-      <strong>{value}<small>{suffix}</small></strong>
-      <div><i style={{ width: `${Math.min(value, 100)}%` }} /></div>
+      <strong>{value === null ? "待确认" : value}{value !== null && <small>{suffix}</small>}</strong>
+      <div><i style={{ width: `${Math.min(value ?? 0, 100)}%` }} /></div>
     </div>
   );
 }

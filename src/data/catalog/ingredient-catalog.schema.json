@@ -1,0 +1,1306 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/HannahHan1625/Miiix/schemas/ingredient-catalog-v1.json",
+  "title": "Miiix ingredient catalog document",
+  "description": "Machine-checkable contract for the v0.4.2 golden ingredient catalog.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "catalogVersion",
+    "dataVersion",
+    "publishedAt",
+    "reviewedAt",
+    "reviewedBy",
+    "sources",
+    "units",
+    "storageMethods",
+    "categories",
+    "ingredients"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "catalogVersion": {
+      "type": "string",
+      "const": "0.4.2"
+    },
+    "dataVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "publishedAt": {
+      "$ref": "#/$defs/dateTime"
+    },
+    "reviewedAt": {
+      "$ref": "#/$defs/dateTime"
+    },
+    "reviewedBy": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "units": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/unit"
+      }
+    },
+    "storageMethods": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/storageMethod"
+      }
+    },
+    "categories": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "$ref": "#/$defs/category"
+      }
+    },
+    "ingredients": {
+      "type": "array",
+      "minItems": 30,
+      "maxItems": 30,
+      "items": {
+        "$ref": "#/$defs/ingredient"
+      }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "dateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reviewStatus": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "rejected"
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "provider",
+        "datasetName",
+        "version",
+        "sourceUrl",
+        "license",
+        "jurisdiction",
+        "retrievedAt",
+        "reviewedAt",
+        "reviewStatus",
+        "notes"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "datasetName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1
+        },
+        "jurisdiction": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retrievedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "reviewedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "reviewStatus": {
+          "$ref": "#/$defs/reviewStatus"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "unit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "code",
+        "nameZh",
+        "nameEn",
+        "dimension",
+        "baseFactor"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "nameZh": {
+          "type": "string",
+          "minLength": 1
+        },
+        "nameEn": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dimension": {
+          "type": "string",
+          "enum": [
+            "count",
+            "mass",
+            "volume",
+            "package"
+          ]
+        },
+        "baseFactor": {
+          "anyOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "storageMethod": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "code",
+        "nameZh",
+        "nameEn",
+        "temperatureMinC",
+        "temperatureMaxC",
+        "environmentTags",
+        "requiresDark",
+        "requiresDry"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "nameZh": {
+          "type": "string",
+          "minLength": 1
+        },
+        "nameEn": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "temperatureMinC": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "temperatureMaxC": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "environmentTags": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "requiresDark": {
+          "type": "boolean"
+        },
+        "requiresDry": {
+          "type": "boolean"
+        }
+      }
+    },
+    "category": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "parentId",
+        "slug",
+        "nameZh",
+        "nameEn",
+        "level",
+        "sortOrder",
+        "dataVersion"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "parentId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "nameZh": {
+          "type": "string",
+          "minLength": 1
+        },
+        "nameEn": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "level": {
+          "type": "integer",
+          "enum": [
+            1,
+            2,
+            3
+          ]
+        },
+        "sortOrder": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dataVersion": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "alias": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "ingredientId",
+        "alias",
+        "normalizedAlias",
+        "aliasType",
+        "locale",
+        "region",
+        "sourceId",
+        "confidence",
+        "reviewStatus",
+        "reviewedAt",
+        "reviewedBy"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "ingredientId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "alias": {
+          "type": "string",
+          "minLength": 1
+        },
+        "normalizedAlias": {
+          "type": "string",
+          "minLength": 1
+        },
+        "aliasType": {
+          "type": "string",
+          "enum": [
+            "common",
+            "regional",
+            "retail",
+            "ocr",
+            "translation",
+            "external_model",
+            "recipe_phrase"
+          ]
+        },
+        "locale": {
+          "type": "string",
+          "minLength": 1
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "reviewStatus": {
+          "$ref": "#/$defs/reviewStatus"
+        },
+        "reviewedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "reviewedBy": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "storageProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "ingredientId",
+        "storageMethodId",
+        "region",
+        "environmentTags",
+        "minDays",
+        "maxDays",
+        "recommendedDays",
+        "context",
+        "foodState",
+        "packagingState",
+        "endpoint",
+        "instructions",
+        "sourceId",
+        "evidenceKey",
+        "confidence",
+        "reviewStatus",
+        "reviewedAt",
+        "reviewedBy"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "ingredientId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "storageMethodId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "region": {
+          "type": "string",
+          "minLength": 1
+        },
+        "environmentTags": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "minDays": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxDays": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "recommendedDays": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "context": {
+          "type": "string",
+          "minLength": 1
+        },
+        "foodState": {
+          "type": "string",
+          "minLength": 1
+        },
+        "packagingState": {
+          "type": "string",
+          "minLength": 1
+        },
+        "endpoint": {
+          "type": "string",
+          "enum": [
+            "quality",
+            "safety",
+            "package_label"
+          ]
+        },
+        "instructions": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "evidenceKey": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "reviewStatus": {
+          "$ref": "#/$defs/reviewStatus"
+        },
+        "reviewedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "reviewedBy": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "externalMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "ingredientId",
+        "system",
+        "externalId",
+        "externalName",
+        "sourceId",
+        "matchType",
+        "reviewStatus",
+        "reviewedAt",
+        "reviewedBy"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "ingredientId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "system": {
+          "type": "string",
+          "enum": [
+            "USDA_SR28_NDB",
+            "USDA_FDC",
+            "FoodKeeper",
+            "other"
+          ]
+        },
+        "externalId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "externalName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "matchType": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "representative",
+            "broader",
+            "narrower"
+          ]
+        },
+        "reviewStatus": {
+          "$ref": "#/$defs/reviewStatus"
+        },
+        "reviewedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "reviewedBy": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "nutritionProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "ingredientId",
+        "basisQuantity",
+        "basisUnitId",
+        "caloriesKcal",
+        "proteinG",
+        "fatG",
+        "carbohydrateG",
+        "fiberG",
+        "dataClassification",
+        "foodState",
+        "sourceRecordId",
+        "sourceRelease",
+        "matchType",
+        "sourceId",
+        "externalMappingId",
+        "reviewStatus",
+        "reviewedAt",
+        "reviewedBy",
+        "notes"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "ingredientId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "basisQuantity": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "basisUnitId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "caloriesKcal": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "proteinG": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fatG": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "carbohydrateG": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fiberG": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dataClassification": {
+          "type": "string",
+          "enum": [
+            "analytical",
+            "calculated",
+            "estimated",
+            "unknown"
+          ]
+        },
+        "foodState": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceRecordId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceRelease": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "matchType": {
+          "type": "string",
+          "enum": [
+            "exact",
+            "representative",
+            "broader",
+            "narrower",
+            "none"
+          ]
+        },
+        "sourceId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "externalMappingId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reviewStatus": {
+          "$ref": "#/$defs/reviewStatus"
+        },
+        "reviewedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "reviewedBy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "aiGeneration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model",
+        "prompt"
+      ],
+      "properties": {
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "imageAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "ingredientId",
+        "assetUri",
+        "assetType",
+        "altText",
+        "originalUrl",
+        "processedUrl",
+        "providerAssetId",
+        "processingStatus",
+        "licenseStatus",
+        "license",
+        "licenseCode",
+        "licenseUrl",
+        "rightsStatus",
+        "attribution",
+        "sourceUrl",
+        "transformLog",
+        "sourceSha256",
+        "processedSha256",
+        "subjectMatchReviewed",
+        "rightsReviewed",
+        "styleConsistency",
+        "aiGeneration",
+        "reviewStatus",
+        "isPrimary"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "ingredientId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "assetUri": {
+          "type": "string",
+          "format": "uri"
+        },
+        "assetType": {
+          "type": "string",
+          "enum": [
+            "source_photo",
+            "cutout",
+            "thumbnail"
+          ]
+        },
+        "altText": {
+          "type": "string",
+          "minLength": 1
+        },
+        "originalUrl": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "processedUrl": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "providerAssetId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "processingStatus": {
+          "type": "string",
+          "enum": [
+            "source",
+            "processed",
+            "placeholder"
+          ]
+        },
+        "licenseStatus": {
+          "type": "string",
+          "enum": [
+            "approved",
+            "approved_for_prototype",
+            "pending",
+            "rejected"
+          ]
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1
+        },
+        "licenseCode": {
+          "type": "string",
+          "minLength": 1
+        },
+        "licenseUrl": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rightsStatus": {
+          "type": "string",
+          "enum": [
+            "cleared",
+            "pending",
+            "rejected"
+          ]
+        },
+        "attribution": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceUrl": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "transformLog": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "sourceSha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "processedSha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subjectMatchReviewed": {
+          "type": "boolean"
+        },
+        "rightsReviewed": {
+          "type": "boolean"
+        },
+        "styleConsistency": {
+          "type": "string",
+          "enum": [
+            "prototype_placeholder",
+            "consistent",
+            "needs_review"
+          ]
+        },
+        "aiGeneration": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/aiGeneration"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reviewStatus": {
+          "$ref": "#/$defs/reviewStatus"
+        },
+        "isPrimary": {
+          "type": "boolean"
+        }
+      }
+    },
+    "unitConversion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "fromUnitId",
+        "toUnitId",
+        "factor",
+        "sourceId",
+        "reviewStatus"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "fromUnitId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "toUnitId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "factor": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "sourceId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "reviewStatus": {
+          "$ref": "#/$defs/reviewStatus"
+        }
+      }
+    },
+    "ingredient": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "legacyIds",
+        "slug",
+        "canonicalNameZh",
+        "canonicalNameEn",
+        "scientificName",
+        "kind",
+        "categoryId",
+        "categoryLevel1Id",
+        "categoryLevel2Id",
+        "categoryLevel3Id",
+        "categoryIds",
+        "aliases",
+        "defaultUnitId",
+        "supportedUnitIds",
+        "defaultAmountMode",
+        "defaultPurchaseQuantity",
+        "unitConversions",
+        "defaultStorageProfileId",
+        "storageProfiles",
+        "nutritionProfile",
+        "referencePrice",
+        "imageAssets",
+        "externalMappings",
+        "sourceIds",
+        "status",
+        "dataVersion",
+        "createdAt",
+        "updatedAt",
+        "reviewedAt",
+        "reviewedBy"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "legacyIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "slug": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "canonicalNameZh": {
+          "type": "string",
+          "minLength": 1
+        },
+        "canonicalNameEn": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scientificName": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "raw",
+            "processed",
+            "condiment",
+            "beverage",
+            "dish_component"
+          ]
+        },
+        "categoryId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "categoryLevel1Id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "categoryLevel2Id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "categoryLevel3Id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "categoryIds": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/uuid"
+            },
+            {
+              "$ref": "#/$defs/uuid"
+            },
+            {
+              "$ref": "#/$defs/uuid"
+            }
+          ],
+          "items": false
+        },
+        "aliases": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/alias"
+          }
+        },
+        "defaultUnitId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "supportedUnitIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/uuid"
+          }
+        },
+        "defaultAmountMode": {
+          "type": "string",
+          "enum": [
+            "count",
+            "mass",
+            "volume",
+            "package"
+          ]
+        },
+        "defaultPurchaseQuantity": {
+          "anyOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unitConversions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/unitConversion"
+          }
+        },
+        "defaultStorageProfileId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "storageProfiles": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/storageProfile"
+          }
+        },
+        "nutritionProfile": {
+          "$ref": "#/$defs/nutritionProfile"
+        },
+        "referencePrice": {
+          "type": "null"
+        },
+        "imageAssets": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/imageAsset"
+          }
+        },
+        "externalMappings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/externalMapping"
+          }
+        },
+        "sourceIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/uuid"
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "active",
+            "archived"
+          ]
+        },
+        "dataVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "reviewedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "reviewedBy": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

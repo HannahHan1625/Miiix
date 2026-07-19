@@ -302,3 +302,26 @@ Product judgment:
 - This is the first version where the recipe lifecycle is backed by durable state instead of React demo state.
 - IndexedDB is appropriate for GitHub Pages validation but does not provide accounts, cross-device sync, backup, or server-side AI security.
 - The next quality gate is data quality: build and review the first high-frequency ingredient catalog before connecting real recognition or recommendation models.
+
+## v0.4.2 — 食材主数据
+
+Date: 2026-07-19
+
+Scope:
+
+- Defined a closed JSON Schema and semantic validation rules for catalog sources, categories, units, storage methods, ingredients, typed aliases, storage profiles, nutrition evidence, image rights, and external mappings.
+- Curated 30 reviewed engineering golden samples across meat/poultry/eggs, vegetables, fruit, tofu/dairy, seafood, staples, oil, and seasonings, all with stable UUIDs.
+- Preserved uncertain facts as `null` or `pending`: no invented nationwide prices, cross-dimension unit conversions, shelf-life precision, nutrition matches, or external-model bindings.
+- Replaced ungoverned ingredient photos with Miiix-owned programmatic SVG prototype placeholders and a documented production-asset gate.
+- Upgraded IndexedDB from v1 to v2 without deleting operational stores; added atomic, digest-aware Catalog seed and legacy short-ID migration.
+- Implemented persisted CatalogRepository reads by ID, canonical name, approved alias, category, storage method, kind, and status.
+- Changed recipes, planning, shopping, and inventory matching from Chinese-string inference to stable ingredient IDs and structured ingredient roles.
+- Added append-only PostgreSQL migration `0006_catalog_data_quality.sql`; historical migrations remain unchanged.
+- Added schema/semantic, upgrade, seed idempotency/rollback, query, and existing vertical-flow regression tests.
+- Added the master-data standard, existing-to-target matrix, image-governance rules, release self-check, and Obsidian version notes.
+
+Product judgment:
+
+- Thirty records are a governed engineering golden set, not a claim about China's national consumption ranking.
+- Stable identity and evidence boundaries now exist before OCR/VLM work: models may propose candidates later, but cannot silently turn a similar string into approved master data.
+- Expanding to 200 records is blocked until real-entry alias/error samples, an accountable review cadence, PostgreSQL migration rehearsal, and production-image governance are demonstrated.

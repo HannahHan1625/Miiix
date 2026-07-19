@@ -1,6 +1,7 @@
 import type { JsonValue } from "../../../domain/persistence";
 import type { MiiixRepositories, RepositoryProvider } from "../contracts";
-import { LocalCatalogRepository } from "./catalogRepository";
+import { IndexedDbCatalogRepository } from "./catalogRepository";
+import { ensureCatalogSeed } from "./catalogSeed";
 import { IndexedDbContext } from "./context";
 import {
   IndexedDbCookingRepository,
@@ -64,12 +65,19 @@ export class IndexedDbRepositoryProvider implements RepositoryProvider {
 
 export async function createIndexedDbRepositoryProvider(databaseName?: string) {
   const database = await openMiiixDatabase(databaseName);
-  return new IndexedDbRepositoryProvider(database);
+  const context = new IndexedDbContext(database);
+  try {
+    await ensureCatalogSeed(context);
+    return new IndexedDbRepositoryProvider(database, context);
+  } catch (error) {
+    database.close();
+    throw error;
+  }
 }
 
 function createRepositories(context: IndexedDbContext): MiiixRepositories {
   return {
-    catalog: new LocalCatalogRepository(),
+    catalog: new IndexedDbCatalogRepository(context),
     inventory: new IndexedDbInventoryRepository(context),
     recipes: new IndexedDbRecipeRepository(context),
     recognition: new IndexedDbRecognitionRepository(context),

@@ -6,7 +6,10 @@ import {
   type IDBPTransaction,
 } from "idb";
 import type {
+  CanonicalIngredient,
   CookingSessionRecord,
+  DataSourceRecord,
+  FoodCategory,
   InventoryLot,
   InventoryTransaction,
   JsonValue,
@@ -20,10 +23,13 @@ import type {
   RecommendationRun,
   ShoppingListItemRecord,
   ShoppingListRecord,
+  StorageMethod,
+  UnitDefinition,
 } from "../../../domain/persistence";
+import type { IngredientDetail } from "../contracts";
 
 export const MIIIX_DATABASE_NAME = "miiix-local";
-export const MIIIX_DATABASE_VERSION = 1;
+export const MIIIX_DATABASE_VERSION = 2;
 
 export type MetaRecord = {
   key: string;
@@ -51,6 +57,23 @@ export type RecommendationFeedbackRecord = {
   action: "viewed" | "dismissed" | "favorite" | "planned" | "cooked" | "rated";
   properties: Record<string, JsonValue>;
   createdAt: string;
+};
+
+/**
+ * IndexedDB keeps the catalog as an aggregate read model. PostgreSQL remains
+ * normalized, while this record makes offline lookups deterministic and cheap.
+ * Every lookup field is derived from `detail` by the catalog seed importer.
+ */
+export type CatalogIngredientRecord = {
+  id: string;
+  canonicalNameKey: string;
+  searchLabelKeys: string[];
+  approvedAliasKeys: string[];
+  categoryIds: string[];
+  storageMethodIds: string[];
+  kind: CanonicalIngredient["kind"];
+  status: CanonicalIngredient["status"];
+  detail: IngredientDetail;
 };
 
 export interface MiiixIndexedDbSchema extends DBSchema {
@@ -178,6 +201,50 @@ export interface MiiixIndexedDbSchema extends DBSchema {
       "by-run": string;
     };
   };
+  catalogSources: {
+    key: string;
+    value: DataSourceRecord;
+    indexes: {
+      "by-provider": string;
+    };
+  };
+  catalogCategories: {
+    key: string;
+    value: FoodCategory;
+    indexes: {
+      "by-parent": string;
+      "by-level": FoodCategory["level"];
+      "by-slug": string;
+    };
+  };
+  catalogUnits: {
+    key: string;
+    value: UnitDefinition;
+    indexes: {
+      "by-code": string;
+    };
+  };
+  catalogStorageMethods: {
+    key: string;
+    value: StorageMethod;
+    indexes: {
+      "by-code": string;
+    };
+  };
+  catalogIngredients: {
+    key: string;
+    value: CatalogIngredientRecord;
+    indexes: {
+      "by-canonical-name": string;
+      "by-search-label": string;
+      "by-approved-alias": string;
+      "by-category": string;
+      "by-storage-method": string;
+      "by-kind": CanonicalIngredient["kind"];
+      "by-status": CanonicalIngredient["status"];
+      "by-kind-status": [CanonicalIngredient["kind"], CanonicalIngredient["status"]];
+    };
+  };
 }
 
 export type MiiixDatabase = IDBPDatabase<MiiixIndexedDbSchema>;
@@ -199,6 +266,11 @@ export const allStoreNames = [
   "recommendationRuns",
   "recommendationCandidates",
   "recommendationFeedback",
+  "catalogSources",
+  "catalogCategories",
+  "catalogUnits",
+  "catalogStorageMethods",
+  "catalogIngredients",
 ] as const;
 export type MiiixStoreName = (typeof allStoreNames)[number];
 export type MiiixReadWriteTransaction = IDBPTransaction<
@@ -209,66 +281,97 @@ export type MiiixReadWriteTransaction = IDBPTransaction<
 
 export function openMiiixDatabase(name = MIIIX_DATABASE_NAME) {
   return openDB<MiiixIndexedDbSchema>(name, MIIIX_DATABASE_VERSION, {
-    upgrade(database) {
-      database.createObjectStore("meta", { keyPath: "key" });
-
-      const lots = database.createObjectStore("inventoryLots", { keyPath: "id" });
-      lots.createIndex("by-user", "userId");
-      lots.createIndex("by-user-status", ["userId", "status"]);
-      lots.createIndex("by-user-ingredient", ["userId", "ingredientId"]);
-
-      const transactions = database.createObjectStore("inventoryTransactions", { keyPath: "id" });
-      transactions.createIndex("by-user", "userId");
-      transactions.createIndex("by-lot", "inventoryLotId");
-      transactions.createIndex("by-user-idempotency", ["userId", "idempotencyKey"], { unique: true });
-
-      const recipes = database.createObjectStore("recipes", { keyPath: "id" });
-      recipes.createIndex("by-status", "status");
-
-      const recipeIngredients = database.createObjectStore("recipeIngredients", { keyPath: "id" });
-      recipeIngredients.createIndex("by-recipe", "recipeId");
-
-      const recipeSteps = database.createObjectStore("recipeSteps", { keyPath: "id" });
-      recipeSteps.createIndex("by-recipe", "recipeId");
-
-      const recipeTools = database.createObjectStore("recipeTools", { keyPath: "id" });
-      recipeTools.createIndex("by-recipe", "recipeId");
-
-      const favorites = database.createObjectStore("favorites", { keyPath: "id" });
-      favorites.createIndex("by-user", "userId");
-
-      const plans = database.createObjectStore("mealPlans", { keyPath: "id" });
-      plans.createIndex("by-user", "userId");
-      plans.createIndex("by-user-date", ["userId", "plannedDate"]);
-
-      const shoppingLists = database.createObjectStore("shoppingLists", { keyPath: "id" });
-      shoppingLists.createIndex("by-user", "userId");
-      shoppingLists.createIndex("by-meal-plan", "mealPlanId");
-
-      const shoppingItems = database.createObjectStore("shoppingItems", { keyPath: "id" });
-      shoppingItems.createIndex("by-list", "shoppingListId");
-
-      const cookingSessions = database.createObjectStore("cookingSessions", { keyPath: "id" });
-      cookingSessions.createIndex("by-user", "userId");
-      cookingSessions.createIndex("by-user-idempotency", ["userId", "idempotencyKey"], { unique: true });
-
-      const recognitionJobs = database.createObjectStore("recognitionJobs", { keyPath: "id" });
-      recognitionJobs.createIndex("by-user", "userId");
-
-      const recognitionCandidates = database.createObjectStore("recognitionCandidates", { keyPath: "id" });
-      recognitionCandidates.createIndex("by-job", "jobId");
-
-      const recommendationRuns = database.createObjectStore("recommendationRuns", { keyPath: "id" });
-      recommendationRuns.createIndex("by-user", "userId");
-
-      const recommendationCandidates = database.createObjectStore("recommendationCandidates", { keyPath: "id" });
-      recommendationCandidates.createIndex("by-run", "runId");
-
-      const recommendationFeedback = database.createObjectStore("recommendationFeedback", { keyPath: "id" });
-      recommendationFeedback.createIndex("by-user", "userId");
-      recommendationFeedback.createIndex("by-run", "runId");
+    upgrade(database, oldVersion) {
+      if (oldVersion < 1) createOperationalStores(database);
+      if (oldVersion < 2) createCatalogStores(database);
     },
   });
+}
+
+function createOperationalStores(database: MiiixDatabase) {
+  database.createObjectStore("meta", { keyPath: "key" });
+
+  const lots = database.createObjectStore("inventoryLots", { keyPath: "id" });
+  lots.createIndex("by-user", "userId");
+  lots.createIndex("by-user-status", ["userId", "status"]);
+  lots.createIndex("by-user-ingredient", ["userId", "ingredientId"]);
+
+  const transactions = database.createObjectStore("inventoryTransactions", { keyPath: "id" });
+  transactions.createIndex("by-user", "userId");
+  transactions.createIndex("by-lot", "inventoryLotId");
+  transactions.createIndex("by-user-idempotency", ["userId", "idempotencyKey"], { unique: true });
+
+  const recipes = database.createObjectStore("recipes", { keyPath: "id" });
+  recipes.createIndex("by-status", "status");
+
+  const recipeIngredients = database.createObjectStore("recipeIngredients", { keyPath: "id" });
+  recipeIngredients.createIndex("by-recipe", "recipeId");
+
+  const recipeSteps = database.createObjectStore("recipeSteps", { keyPath: "id" });
+  recipeSteps.createIndex("by-recipe", "recipeId");
+
+  const recipeTools = database.createObjectStore("recipeTools", { keyPath: "id" });
+  recipeTools.createIndex("by-recipe", "recipeId");
+
+  const favorites = database.createObjectStore("favorites", { keyPath: "id" });
+  favorites.createIndex("by-user", "userId");
+
+  const plans = database.createObjectStore("mealPlans", { keyPath: "id" });
+  plans.createIndex("by-user", "userId");
+  plans.createIndex("by-user-date", ["userId", "plannedDate"]);
+
+  const shoppingLists = database.createObjectStore("shoppingLists", { keyPath: "id" });
+  shoppingLists.createIndex("by-user", "userId");
+  shoppingLists.createIndex("by-meal-plan", "mealPlanId");
+
+  const shoppingItems = database.createObjectStore("shoppingItems", { keyPath: "id" });
+  shoppingItems.createIndex("by-list", "shoppingListId");
+
+  const cookingSessions = database.createObjectStore("cookingSessions", { keyPath: "id" });
+  cookingSessions.createIndex("by-user", "userId");
+  cookingSessions.createIndex("by-user-idempotency", ["userId", "idempotencyKey"], { unique: true });
+
+  const recognitionJobs = database.createObjectStore("recognitionJobs", { keyPath: "id" });
+  recognitionJobs.createIndex("by-user", "userId");
+
+  const recognitionCandidates = database.createObjectStore("recognitionCandidates", { keyPath: "id" });
+  recognitionCandidates.createIndex("by-job", "jobId");
+
+  const recommendationRuns = database.createObjectStore("recommendationRuns", { keyPath: "id" });
+  recommendationRuns.createIndex("by-user", "userId");
+
+  const recommendationCandidates = database.createObjectStore("recommendationCandidates", { keyPath: "id" });
+  recommendationCandidates.createIndex("by-run", "runId");
+
+  const recommendationFeedback = database.createObjectStore("recommendationFeedback", { keyPath: "id" });
+  recommendationFeedback.createIndex("by-user", "userId");
+  recommendationFeedback.createIndex("by-run", "runId");
+}
+
+function createCatalogStores(database: MiiixDatabase) {
+  const sources = database.createObjectStore("catalogSources", { keyPath: "id" });
+  sources.createIndex("by-provider", "provider");
+
+  const categories = database.createObjectStore("catalogCategories", { keyPath: "id" });
+  categories.createIndex("by-parent", "parentId");
+  categories.createIndex("by-level", "level");
+  categories.createIndex("by-slug", "slug", { unique: true });
+
+  const units = database.createObjectStore("catalogUnits", { keyPath: "id" });
+  units.createIndex("by-code", "code", { unique: true });
+
+  const storageMethods = database.createObjectStore("catalogStorageMethods", { keyPath: "id" });
+  storageMethods.createIndex("by-code", "code", { unique: true });
+
+  const ingredients = database.createObjectStore("catalogIngredients", { keyPath: "id" });
+  ingredients.createIndex("by-canonical-name", "canonicalNameKey", { unique: true });
+  ingredients.createIndex("by-search-label", "searchLabelKeys", { multiEntry: true });
+  ingredients.createIndex("by-approved-alias", "approvedAliasKeys", { multiEntry: true, unique: true });
+  ingredients.createIndex("by-category", "categoryIds", { multiEntry: true });
+  ingredients.createIndex("by-storage-method", "storageMethodIds", { multiEntry: true });
+  ingredients.createIndex("by-kind", "kind");
+  ingredients.createIndex("by-status", "status");
+  ingredients.createIndex("by-kind-status", ["kind", "status"]);
 }
 
 export function deleteMiiixDatabase(name = MIIIX_DATABASE_NAME) {

@@ -1,280 +1,114 @@
-import { categoryTree, foodLibrary, kitchenTools } from "../../catalog";
 import type {
   CatalogRepository,
-  IngredientDetail,
   IngredientQuery,
 } from "../contracts";
-import type {
-  CanonicalIngredient,
-  FoodCategory,
-  KitchenToolDefinition,
-  StorageMethod,
-  UnitDefinition,
-} from "../../../domain/persistence";
+import type { KitchenToolDefinition } from "../../../domain/persistence";
+import { normalizeCatalogLabel } from "../../catalog/normalize";
+import { aliasLookupKey } from "./catalogSeed";
+import { IndexedDbContext } from "./context";
 
-const CATALOG_TIMESTAMP = "2026-07-14T00:00:00.000Z";
+/**
+ * Offline Catalog adapter backed by IndexedDB v2.
+ *
+ * Ingredients and their related master data are imported by `catalogSeed.ts`;
+ * this repository is deliberately read-only so UI code cannot mutate the
+ * catalog through the business repository contract.
+ */
+export class IndexedDbCatalogRepository implements CatalogRepository {
+  constructor(private readonly context: IndexedDbContext) {}
 
-export const LOCAL_UNIT_IDS = {
-  count: "unit-piece",
-  weight: "unit-gram",
-} as const;
-
-export const LOCAL_STORAGE_METHOD_IDS = {
-  fridge: "storage-fridge",
-  freezer: "storage-freezer",
-  room: "storage-room",
-  seasoning: "storage-seasoning",
-} as const;
-
-const units: UnitDefinition[] = [
-  {
-    id: LOCAL_UNIT_IDS.count,
-    code: "piece",
-    nameZh: "件",
-    nameEn: "piece",
-    dimension: "count",
-    baseFactor: 1,
-  },
-  {
-    id: LOCAL_UNIT_IDS.weight,
-    code: "g",
-    nameZh: "克",
-    nameEn: "gram",
-    dimension: "mass",
-    baseFactor: 1,
-  },
-];
-
-const storageMethods: StorageMethod[] = [
-  {
-    id: LOCAL_STORAGE_METHOD_IDS.fridge,
-    code: "fridge",
-    nameZh: "冷藏",
-    nameEn: "refrigerated",
-    temperatureMinC: 0,
-    temperatureMaxC: 8,
-    requiresDark: false,
-    requiresDry: false,
-  },
-  {
-    id: LOCAL_STORAGE_METHOD_IDS.freezer,
-    code: "freezer",
-    nameZh: "冷冻",
-    nameEn: "frozen",
-    temperatureMinC: -24,
-    temperatureMaxC: -12,
-    requiresDark: false,
-    requiresDry: false,
-  },
-  {
-    id: LOCAL_STORAGE_METHOD_IDS.room,
-    code: "room",
-    nameZh: "室温",
-    nameEn: "room temperature",
-    temperatureMinC: 10,
-    temperatureMaxC: 30,
-    requiresDark: false,
-    requiresDry: false,
-  },
-  {
-    id: LOCAL_STORAGE_METHOD_IDS.seasoning,
-    code: "seasoning",
-    nameZh: "避光防潮",
-    nameEn: "dark and dry",
-    temperatureMinC: 10,
-    temperatureMaxC: 30,
-    requiresDark: true,
-    requiresDry: true,
-  },
-];
-
-const categories: FoodCategory[] = [];
-const categoryIdsByName = new Map<string, string>();
-
-categoryTree.forEach((level1, level1Index) => {
-  const level1Id = `category-${level1Index + 1}`;
-  categories.push({
-    id: level1Id,
-    parentId: null,
-    slug: `level-1-${level1Index + 1}`,
-    nameZh: level1.level1,
-    nameEn: null,
-    level: 1,
-    sortOrder: level1Index,
-  });
-  categoryIdsByName.set(level1.level1, level1Id);
-
-  level1.level2.forEach((level2, level2Index) => {
-    const level2Id = `${level1Id}-${level2Index + 1}`;
-    categories.push({
-      id: level2Id,
-      parentId: level1Id,
-      slug: `level-2-${level1Index + 1}-${level2Index + 1}`,
-      nameZh: level2.name,
-      nameEn: null,
-      level: 2,
-      sortOrder: level2Index,
-    });
-    categoryIdsByName.set(`${level1.level1}/${level2.name}`, level2Id);
-
-    level2.level3.forEach((level3, level3Index) => {
-      const level3Id = `${level2Id}-${level3Index + 1}`;
-      categories.push({
-        id: level3Id,
-        parentId: level2Id,
-        slug: `level-3-${level1Index + 1}-${level2Index + 1}-${level3Index + 1}`,
-        nameZh: level3,
-        nameEn: null,
-        level: 3,
-        sortOrder: level3Index,
-      });
-      categoryIdsByName.set(`${level1.level1}/${level2.name}/${level3}`, level3Id);
-    });
-  });
-});
-
-const ingredientDetails: IngredientDetail[] = foodLibrary.map((food) => {
-  const ingredient: CanonicalIngredient = {
-    id: food.id,
-    slug: food.id,
-    canonicalNameZh: food.name,
-    canonicalNameEn: null,
-    kind: food.storage === "seasoning" ? "condiment" : "raw",
-    defaultUnitId: food.defaultMode === "weight" ? LOCAL_UNIT_IDS.weight : LOCAL_UNIT_IDS.count,
-    parentIngredientId: null,
-    sourceId: null,
-    status: "active",
-    metadata: {
-      level1: food.level1,
-      level2: food.level2,
-      level3: food.level3,
-      displayUnit: food.unit,
-      defaultCount: food.defaultCount,
-      defaultWeight: food.defaultWeight,
-      defaultPrice: food.price,
-    },
-    createdAt: CATALOG_TIMESTAMP,
-    updatedAt: CATALOG_TIMESTAMP,
-  };
-
-  return {
-    ingredient,
-    aliases: [
-      {
-        id: `alias-${food.id}`,
-        ingredientId: food.id,
-        locale: "zh-CN",
-        alias: food.name,
-        normalizedAlias: normalizeLabel(food.name),
-        aliasType: "common",
-        confidence: 1,
-        reviewStatus: "approved",
-      },
-    ],
-    categoryIds: [
-      categoryIdsByName.get(food.level1),
-      categoryIdsByName.get(`${food.level1}/${food.level2}`),
-      categoryIdsByName.get(`${food.level1}/${food.level2}/${food.level3}`),
-    ].filter((id): id is string => Boolean(id)),
-    storageProfiles: [
-      {
-        id: `storage-profile-${food.id}`,
-        ingredientId: food.id,
-        storageMethodId: LOCAL_STORAGE_METHOD_IDS[food.storage],
-        shelfLifeDays: food.shelfLifeDays,
-        afterOpeningDays: null,
-        freshnessWarningDays: Math.max(1, Math.ceil(food.shelfLifeDays * 0.2)),
-        instructions: food.storageTags.join("；"),
-        sourceId: null,
-        confidence: 0.75,
-        reviewStatus: "pending",
-      },
-    ],
-    nutritionProfiles: [
-      {
-        id: `nutrition-${food.id}`,
-        ingredientId: food.id,
-        basisQuantity: 100,
-        basisUnitId: LOCAL_UNIT_IDS.weight,
-        caloriesKcal: food.caloriesPer100g,
-        proteinG: null,
-        fatG: null,
-        carbohydrateG: null,
-        fiberG: null,
-        sourceId: null,
-        reviewStatus: "pending",
-      },
-    ],
-    assets: [
-      {
-        id: `asset-${food.id}`,
-        ingredientId: food.id,
-        assetUri: food.photo,
-        assetType: "thumbnail",
-        backgroundRemoved: false,
-        outlineApplied: true,
-        sourceUrl: food.photo.startsWith("http") ? food.photo : null,
-        license: null,
-        attribution: null,
-        reviewStatus: "pending",
-        isPrimary: true,
-      },
-    ],
-  };
-});
-
-const toolDefinitions: KitchenToolDefinition[] = kitchenTools.map((tool) => ({
-  id: tool.id,
-  code: tool.id,
-  nameZh: tool.name,
-  nameEn: null,
-  description: tool.subtitle,
-  assetUri: tool.image,
-  status: "active",
-}));
-
-export class LocalCatalogRepository implements CatalogRepository {
   async getIngredient(id: string) {
-    return ingredientDetails.find((detail) => detail.ingredient.id === id) ?? null;
+    return this.context.read(["catalogIngredients"], async (transaction) => {
+      return (await transaction.objectStore("catalogIngredients").get(id))?.detail ?? null;
+    });
   }
 
   async findIngredients(query: IngredientQuery) {
-    const text = normalizeLabel(query.text ?? "");
-    const matches = ingredientDetails.filter((detail) => {
-      const matchesText = !text || [detail.ingredient.canonicalNameZh, ...detail.aliases.map((alias) => alias.alias)]
-        .some((label) => normalizeLabel(label).includes(text));
-      const matchesCategory = !query.categoryId || detail.categoryIds.includes(query.categoryId);
-      const matchesKind = !query.kind || detail.ingredient.kind === query.kind;
-      const matchesStatus = !query.status || detail.ingredient.status === query.status;
-      return matchesText && matchesCategory && matchesKind && matchesStatus;
+    const text = normalizeCatalogLabel(query.text ?? "");
+    const storageMethodId = query.storageMethodId;
+    const records = await this.context.read(["catalogIngredients"], async (transaction) => {
+      return transaction.objectStore("catalogIngredients").getAll();
     });
-    return matches.slice(0, query.limit ?? matches.length);
+
+    const matches = records.filter((record) => {
+      const matchesText = !text || record.searchLabelKeys.some((label) => label.includes(text));
+      const matchesCategory = !query.categoryId || record.categoryIds.includes(query.categoryId);
+      const matchesStorage = !storageMethodId || record.storageMethodIds.includes(storageMethodId);
+      const matchesKind = !query.kind || record.kind === query.kind;
+      const matchesStatus = !query.status || record.status === query.status;
+      return matchesText && matchesCategory && matchesStorage && matchesKind && matchesStatus;
+    });
+
+    matches.sort((left, right) => {
+      const leftRank = catalogSearchRank(left.canonicalNameKey, left.approvedAliasKeys, text);
+      const rightRank = catalogSearchRank(right.canonicalNameKey, right.approvedAliasKeys, text);
+      return leftRank - rightRank
+        || left.detail.ingredient.canonicalNameZh.localeCompare(
+          right.detail.ingredient.canonicalNameZh,
+          "zh-CN",
+        );
+    });
+
+    const limit = query.limit === undefined
+      ? matches.length
+      : Math.max(0, Math.trunc(query.limit));
+    return matches.slice(0, limit).map((record) => record.detail);
   }
 
   async resolveIngredientAlias(rawLabel: string, locale = "zh-CN") {
-    const normalized = normalizeLabel(rawLabel);
-    return ingredientDetails.find((detail) => detail.aliases.some(
-      (alias) => alias.locale === locale && alias.normalizedAlias === normalized,
-    )) ?? null;
+    const normalized = normalizeCatalogLabel(rawLabel);
+    if (!normalized) return null;
+
+    return this.context.read(["catalogIngredients"], async (transaction) => {
+      const record = await transaction.objectStore("catalogIngredients")
+        .index("by-approved-alias")
+        .get(aliasLookupKey(locale, normalized));
+      return record?.detail ?? null;
+    });
   }
 
   async listCategories() {
-    return categories;
+    return this.context.read(["catalogCategories"], async (transaction) => {
+      const records = await transaction.objectStore("catalogCategories").getAll();
+      return records.sort((left, right) => left.level - right.level
+        || left.sortOrder - right.sortOrder
+        || left.nameZh.localeCompare(right.nameZh, "zh-CN"));
+    });
   }
 
   async listUnits() {
-    return units;
+    return this.context.read(["catalogUnits"], async (transaction) => {
+      const records = await transaction.objectStore("catalogUnits").getAll();
+      return records.sort((left, right) => left.code.localeCompare(right.code));
+    });
   }
 
   async listStorageMethods() {
-    return storageMethods;
+    return this.context.read(["catalogStorageMethods"], async (transaction) => {
+      const records = await transaction.objectStore("catalogStorageMethods").getAll();
+      return records.sort((left, right) => left.code.localeCompare(right.code));
+    });
   }
 
   async listKitchenTools() {
-    return toolDefinitions;
+    // Tools remain a UI projection in v0.4.2; load them only when requested so
+    // catalog initialization never depends on demo recipes or screen fixtures.
+    const { kitchenTools } = await import("../../catalog");
+    return kitchenTools.map((tool): KitchenToolDefinition => ({
+      id: tool.id,
+      code: tool.id,
+      nameZh: tool.name,
+      nameEn: null,
+      description: tool.subtitle,
+      assetUri: tool.image,
+      status: "active",
+    }));
   }
 }
 
-function normalizeLabel(value: string) {
-  return value.trim().toLocaleLowerCase("zh-CN").replace(/\s+/g, "");
+function catalogSearchRank(canonicalNameKey: string, approvedAliasKeys: string[], text: string) {
+  if (!text) return 3;
+  if (canonicalNameKey === text) return 0;
+  if (approvedAliasKeys.some((key) => key.endsWith(`:${text}`))) return 1;
+  return 2;
 }
