@@ -41,6 +41,11 @@ export class IndexedDbRepositoryProvider implements RepositoryProvider {
       } catch {
         // The failing request may already have aborted the transaction.
       }
+      try {
+        await transaction.done;
+      } catch {
+        // Expected after abort; preserve the original domain error below.
+      }
       throw error;
     }
   }

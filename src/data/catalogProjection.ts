@@ -1,4 +1,4 @@
-import catalogJson from "./catalog/v0.4.2-golden-catalog.json";
+import catalogJson from "./catalog/v0.4.2.1-golden-catalog.json";
 import type { AmountMode, FoodInfo, StorageZone } from "../domain/inventory";
 import { catalogPlaceholderImage } from "../domain/catalog";
 import type { IngredientCatalogDocument, IngredientDetail } from "./catalog/types";
@@ -23,9 +23,21 @@ const INPUT_FALLBACK_CONTINUOUS = 250;
 
 export function resolveCatalogIngredientId(idOrLegacyId: string) {
   if (ingredientById.has(idOrLegacyId)) return idOrLegacyId;
-  return legacyIdToIngredientId.get(idOrLegacyId)
-    ?? ingredientCatalog.ingredients.find((ingredient) => ingredient.slug === idOrLegacyId)?.id
+  return ingredientCatalog.ingredients.find((ingredient) => ingredient.slug === idOrLegacyId)?.id
     ?? null;
+}
+
+/**
+ * Compatibility-only v0.4.1 migration resolver. Legacy technical IDs are not
+ * natural-language labels: notably `pork` means the old minced-pork record.
+ */
+export function resolveLegacyIngredientId(legacyId: string) {
+  return legacyIdToIngredientId.get(legacyId) ?? null;
+}
+
+export function getLegacyProjectedFood(legacyId: string) {
+  const id = resolveLegacyIngredientId(legacyId);
+  return id ? catalogFoodLibrary.find((food) => food.id === id) ?? null : null;
 }
 
 export function getCatalogIngredient(idOrLegacyId: string) {
@@ -81,6 +93,10 @@ function ingredientToFoodInfo(ingredient: IngredientDetail): FoodInfo {
 
   return {
     id: ingredient.id,
+    conceptId: ingredient.conceptId,
+    variantId: ingredient.variantId,
+    formCode: ingredient.formCode,
+    processState: ingredient.processState,
     name: ingredient.canonicalNameZh,
     level1: level1?.nameZh ?? "未分类",
     level2: level2?.nameZh ?? "未分类",
@@ -109,7 +125,7 @@ function ingredientToFoodInfo(ingredient: IngredientDetail): FoodInfo {
 }
 
 export const catalogFoodLibrary = ingredientCatalog.ingredients
-  .filter((ingredient) => ingredient.status === "active")
+  .filter((ingredient) => ingredient.status === "active" && ingredient.isSelectable)
   .map(ingredientToFoodInfo);
 
 export const catalogCategoryTree = ingredientCatalog.categories

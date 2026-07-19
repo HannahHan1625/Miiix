@@ -14,6 +14,21 @@ export type ReviewStatus = "pending" | "approved" | "rejected";
 export type IngredientStatus = "draft" | "active" | "archived";
 export type IngredientKind = "raw" | "processed" | "condiment" | "beverage" | "dish_component";
 export type UnitDimension = "count" | "mass" | "volume" | "package";
+export type IngredientFormCode =
+  | "unspecified"
+  | "whole_piece"
+  | "sliced"
+  | "diced"
+  | "shredded"
+  | "ground";
+export type IngredientProcessState = "unspecified" | "raw" | "cooked" | "processed";
+export type IngredientRecordRole = "concept" | "variant" | "form_projection";
+export type IngredientSpec = {
+  conceptId: EntityId;
+  variantId: EntityId | null;
+  formCode: IngredientFormCode;
+  processState: IngredientProcessState;
+};
 
 export type DataSourceRecord = {
   id: EntityId;
@@ -22,8 +37,44 @@ export type DataSourceRecord = {
   version: string;
   sourceUrl: string | null;
   license: string | null;
+  licenseCode: string;
+  licenseUrl: string | null;
+  sourceType: "curated" | "standard" | "guidance" | "dataset" | "model";
+  sourceRevision: string;
+  usageScopes: Array<"identity" | "nutrition" | "storage" | "recommendation" | "image">;
+  rightsReviewStatus: "approved" | "citation_only" | "review_required" | "restricted";
+  redistributionStatus: "allowed" | "attribution_required" | "metadata_only" | "prohibited";
+  attributionRequired: boolean;
+  snapshotSha256: string | null;
+  importerVersion: string | null;
   importedAt: ISODateTime;
   metadata: Record<string, JsonValue>;
+};
+
+export type ImportBatchRecord = {
+  id: EntityId;
+  sourceId: EntityId;
+  sourceRevision: string;
+  importerVersion: string;
+  importedAt: ISODateTime;
+  reviewedAt: ISODateTime;
+  reviewedBy: string;
+  inputRecordCount: number;
+  acceptedMappingCount: number;
+  pendingMappingCount: number;
+  rejectedRecordCount: number;
+  recordsSha256: string;
+  status: "staged" | "published" | "rejected";
+  notes: string | null;
+};
+
+export type IngredientFormDefinition = {
+  code: IngredientFormCode;
+  nameZh: string;
+  nameEn: string;
+  description: string;
+  status: "active" | "archived";
+  dataVersion: string;
 };
 
 export type UnitDefinition = {
@@ -52,6 +103,12 @@ export type CanonicalIngredient = {
   canonicalNameEn: string | null;
   scientificName: string | null;
   kind: IngredientKind;
+  recordRole: IngredientRecordRole;
+  conceptId: EntityId;
+  variantId: EntityId | null;
+  formCode: IngredientFormCode;
+  processState: IngredientProcessState;
+  isSelectable: boolean;
   defaultUnitId: EntityId | null;
   defaultAmountMode: UnitDimension;
   defaultPurchaseQuantity: number | null;
@@ -104,6 +161,8 @@ export type IngredientStorageProfile = {
   regionCode: string;
   environmentTags: string[];
   foodState: string;
+  formCode: IngredientFormCode;
+  processState: IngredientProcessState;
   packagingState: string;
   endpoint: "safety" | "quality" | "package_label";
   instructions: string | null;
@@ -127,6 +186,8 @@ export type NutritionProfile = {
   fiberG: number | null;
   dataClassification: "analytical" | "calculated" | "borrowed" | "estimated" | "not_measured";
   foodState: string;
+  formCode: IngredientFormCode;
+  processState: IngredientProcessState;
   sourceRecordId: string | null;
   sourceRelease: string | null;
   externalMappingId: EntityId | null;
@@ -184,9 +245,14 @@ export type ExternalIngredientMapping = {
   provider: string;
   externalKey: string;
   externalLabel: string | null;
+  externalVersion: string;
   matchType: "exact" | "representative" | "broader" | "narrower" | "related";
+  mappingLevel: "record" | "concept";
+  usageScopes: Array<"identity" | "nutrition" | "storage" | "recommendation" | "image">;
+  lossiness: Array<"form" | "variant" | "process_state" | "species" | "product_type">;
   confidence: number;
   sourceId: EntityId | null;
+  importBatchId: EntityId | null;
   reviewStatus: ReviewStatus;
   reviewedBy: string | null;
   reviewedAt: ISODateTime | null;
@@ -224,6 +290,10 @@ export type RecipeIngredientLine = {
   id: EntityId;
   recipeId: EntityId;
   ingredientId: EntityId;
+  conceptId: EntityId;
+  variantId: EntityId | null;
+  requiredFormCode: IngredientFormCode;
+  requiredProcessState: IngredientProcessState;
   role: "main" | "seasoning" | "optional" | "garnish";
   quantity: number | null;
   unitId: EntityId | null;
@@ -245,6 +315,12 @@ export type InventoryLot = {
   id: EntityId;
   userId: EntityId;
   ingredientId: EntityId;
+  conceptId: EntityId;
+  variantId: EntityId | null;
+  formCode: IngredientFormCode;
+  processState: IngredientProcessState;
+  originType: "purchased" | "user_transformed" | "imported" | "unknown";
+  derivedFromLotId: EntityId | null;
   quantityInitial: number;
   quantityRemaining: number;
   unitId: EntityId;
@@ -298,6 +374,10 @@ export type RecognitionCandidate = {
   rawLabel: string;
   ingredientId: EntityId | null;
   correctedIngredientId: EntityId | null;
+  conceptId: EntityId | null;
+  variantId: EntityId | null;
+  formCode: IngredientFormCode;
+  processState: IngredientProcessState;
   confidence: number | null;
   status: "pending" | "accepted" | "corrected" | "ignored";
   sortOrder: number;
@@ -330,6 +410,10 @@ export type ShoppingListItemRecord = {
   id: EntityId;
   shoppingListId: EntityId;
   ingredientId: EntityId;
+  conceptId: EntityId;
+  variantId: EntityId | null;
+  requestedFormCode: IngredientFormCode;
+  requestedProcessState: IngredientProcessState;
   requiredQuantity: number;
   ownedQuantity: number;
   unitId: EntityId;

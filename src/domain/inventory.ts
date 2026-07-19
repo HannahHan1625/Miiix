@@ -1,3 +1,5 @@
+import type { IngredientFormCode, IngredientProcessState } from "./persistence";
+
 export type StorageZone = "fridge" | "freezer" | "room" | "dryDark";
 export type AmountMode = "count" | "mass" | "volume" | "package";
 export type Freshness = "fresh" | "good" | "soon" | "danger" | "unknown";
@@ -6,6 +8,10 @@ export type RecognitionStatus = "queued" | "selected" | "ignored";
 
 export type FoodInfo = {
   id: string;
+  conceptId: string;
+  variantId: string | null;
+  formCode: IngredientFormCode;
+  processState: IngredientProcessState;
   name: string;
   level1: string;
   level2: string;

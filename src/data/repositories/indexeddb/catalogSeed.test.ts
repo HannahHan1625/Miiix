@@ -11,7 +11,7 @@ import type {
   ShoppingListItemRecord,
 } from "../../../domain/persistence";
 import type { IngredientCatalogDocument } from "../../catalog/types";
-import goldenCatalogJson from "../../catalog/v0.4.2-golden-catalog.json";
+import goldenCatalogJson from "../../catalog/v0.4.2.1-golden-catalog.json";
 import { IndexedDbContext } from "./context";
 import {
   CATALOG_SEED_DIGEST_META_KEY,
@@ -24,10 +24,12 @@ import {
   type MiiixDatabase,
 } from "./schema";
 
-const goldenCatalog = goldenCatalogJson as IngredientCatalogDocument;
+const goldenCatalog = goldenCatalogJson as unknown as IngredientCatalogDocument;
 const EGG_ID = "50000000-0000-4000-8000-000000000001";
+const PORK_CONCEPT_ID = "50000000-0000-4000-8000-000000000006";
 const PORK_ID = "50000000-0000-4000-8000-000000000007";
 const RICE_ID = "50000000-0000-4000-8000-000000000025";
+const TOMATO_ID = "50000000-0000-4000-8000-000000000011";
 const GRAM_ID = "20000000-0000-4000-8000-000000000001";
 const PIECE_ID = "20000000-0000-4000-8000-000000000003";
 const DRY_DARK_ID = "30000000-0000-4000-8000-000000000004";
@@ -42,7 +44,7 @@ afterEach(async () => {
   databases.clear();
 });
 
-describe("v0.4.2 IndexedDB catalog seed", () => {
+describe("v0.4.2.1 IndexedDB catalog seed", () => {
   it("imports the 30-item golden catalog and records independent version/digest meta", async () => {
     const { database, context } = await createTestContext("initial");
 
@@ -52,10 +54,12 @@ describe("v0.4.2 IndexedDB catalog seed", () => {
       changed: true,
       catalogVersion: goldenCatalog.catalogVersion,
       ingredientCount: 30,
-      migratedReferenceCount: 0,
+      migratedFieldCount: 0,
     });
     await expect(database.count("catalogIngredients")).resolves.toBe(30);
     await expect(database.count("catalogSources")).resolves.toBe(goldenCatalog.sources.length);
+    await expect(database.count("catalogImportBatches")).resolves.toBe(goldenCatalog.importBatches.length);
+    await expect(database.count("catalogIngredientForms")).resolves.toBe(goldenCatalog.ingredientForms.length);
     await expect(database.count("catalogCategories")).resolves.toBe(goldenCatalog.categories.length);
     await expect(database.count("catalogUnits")).resolves.toBe(goldenCatalog.units.length);
     await expect(database.count("catalogStorageMethods")).resolves.toBe(goldenCatalog.storageMethods.length);
@@ -83,19 +87,46 @@ describe("v0.4.2 IndexedDB catalog seed", () => {
     await expect(database.get("catalogIngredients", EGG_ID)).resolves.toEqual(eggBefore);
   });
 
-  it("replaces a changed, fully valid catalog snapshot", async () => {
+  it("rejects changed content under an existing catalog version", async () => {
     const { database, context } = await createTestContext("update");
     await ensureCatalogSeed(context);
 
     const update = structuredClone(goldenCatalog);
     update.ingredients[0].updatedAt = "2026-07-19T12:05:00+08:00";
 
-    const result = await ensureCatalogSeed(context, update);
+    await expect(ensureCatalogSeed(context, update)).rejects.toThrow(
+      "bump catalogVersion before importing changed data",
+    );
 
-    expect(result).toMatchObject({ changed: true, ingredientCount: 30 });
     await expect(database.count("catalogIngredients")).resolves.toBe(30);
     await expect(database.get("catalogIngredients", EGG_ID)).resolves.toMatchObject({
-      detail: { ingredient: { updatedAt: "2026-07-19T12:05:00+08:00" } },
+      detail: { ingredient: { updatedAt: goldenCatalog.ingredients[0].updatedAt } },
+    });
+  });
+
+  it("preserves an explicit operational form when the catalog snapshot refreshes", async () => {
+    const { database, context } = await createTestContext("preserve-form");
+    await ensureCatalogSeed(context);
+    await database.put("inventoryLots", {
+      ...inventoryLot("lot-diced-tomato", TOMATO_ID, GRAM_ID, null, "fridge"),
+      conceptId: TOMATO_ID,
+      variantId: null,
+      formCode: "diced",
+      processState: "raw",
+      originType: "purchased",
+      derivedFromLotId: null,
+    });
+
+    const update = structuredClone(goldenCatalog);
+    update.catalogVersion = "0.4.2.2";
+    update.ingredients[0].updatedAt = "2026-07-19T12:06:00+08:00";
+    await ensureCatalogSeed(context, update);
+
+    await expect(database.get("inventoryLots", "lot-diced-tomato")).resolves.toMatchObject({
+      ingredientId: TOMATO_ID,
+      conceptId: TOMATO_ID,
+      formCode: "diced",
+      processState: "raw",
     });
   });
 
@@ -115,10 +146,16 @@ describe("v0.4.2 IndexedDB catalog seed", () => {
 
     const result = await ensureCatalogSeed(context);
 
-    expect(result.migratedReferenceCount).toBe(17);
+    expect(result.migratedFieldCount).toBeGreaterThan(0);
     await expect(database.get("inventoryLots", "lot-egg")).resolves.toMatchObject({
       id: "lot-egg",
       ingredientId: EGG_ID,
+      conceptId: EGG_ID,
+      variantId: null,
+      formCode: "unspecified",
+      processState: "raw",
+      originType: "purchased",
+      derivedFromLotId: null,
       quantityInitial: 200,
       quantityRemaining: 200,
       unitId: GRAM_ID,
@@ -137,20 +174,46 @@ describe("v0.4.2 IndexedDB catalog seed", () => {
     });
     await expect(database.get("inventoryLots", "lot-unknown")).resolves.toMatchObject({
       ingredientId: "unknown-legacy",
+      conceptId: "unknown-legacy",
+      variantId: null,
+      formCode: "unspecified",
+      processState: "unspecified",
+      originType: "purchased",
+      derivedFromLotId: null,
       unitId: "unknown-unit",
       storageMethodId: null,
     });
     await expect(database.get("recipeIngredients", "recipe-line-pork")).resolves.toMatchObject({
       ingredientId: PORK_ID,
+      conceptId: PORK_CONCEPT_ID,
+      variantId: null,
+      requiredFormCode: "ground",
+      requiredProcessState: "raw",
       unitId: GRAM_ID,
     });
     await expect(database.get("shoppingItems", "shopping-rice")).resolves.toMatchObject({
       ingredientId: RICE_ID,
+      conceptId: RICE_ID,
+      variantId: null,
+      requestedFormCode: "unspecified",
+      requestedProcessState: "cooked",
       unitId: PIECE_ID,
     });
     await expect(database.get("recognitionCandidates", "recognition-legacy")).resolves.toMatchObject({
       ingredientId: EGG_ID,
       correctedIngredientId: PORK_ID,
+      conceptId: PORK_CONCEPT_ID,
+      variantId: null,
+      formCode: "ground",
+      processState: "raw",
+    });
+    await expect(database.get("recognitionCandidates", "recognition-unresolved")).resolves.toMatchObject({
+      ingredientId: null,
+      correctedIngredientId: null,
+      conceptId: null,
+      variantId: null,
+      formCode: "unspecified",
+      processState: "unspecified",
     });
     await expect(database.get("recommendationRuns", "run-legacy")).resolves.toMatchObject({
       selectedIngredientIds: [EGG_ID, "unknown-legacy"],
@@ -164,6 +227,8 @@ describe("v0.4.2 IndexedDB catalog seed", () => {
       metadata: {
         ingredientId: EGG_ID,
         nested: { ingredientIds: [PORK_ID, "unknown-legacy"] },
+        externalIngredientId: "pork",
+        providerIngredientIds: ["pork"],
       },
     });
   });
@@ -180,6 +245,7 @@ describe("v0.4.2 IndexedDB catalog seed", () => {
     ));
 
     const failedUpdate = structuredClone(goldenCatalog);
+    failedUpdate.catalogVersion = "0.4.2.2";
     failedUpdate.ingredients[0].updatedAt = "2026-07-19T12:10:00+08:00";
 
     await expect(ensureCatalogSeed(context, failedUpdate, {
@@ -242,6 +308,7 @@ async function putOperationalLegacyFixture(database: MiiixDatabase) {
   await transaction.objectStore("recipeIngredients").put(recipeIngredientLine());
   await transaction.objectStore("shoppingItems").put(shoppingItem());
   await transaction.objectStore("recognitionCandidates").put(recognitionCandidate());
+  await transaction.objectStore("recognitionCandidates").put(unresolvedRecognitionCandidate());
   await transaction.objectStore("recommendationRuns").put(recommendationRun());
   await transaction.objectStore("recommendationCandidates").put(recommendationCandidate());
   await transaction.done;
@@ -275,7 +342,7 @@ function inventoryLot(
     status: "available",
     createdAt: "2026-07-19T00:00:00.000Z",
     updatedAt: "2026-07-19T00:00:00.000Z",
-  };
+  } as unknown as InventoryLot;
 }
 
 function inventoryTransaction(): InventoryTransaction {
@@ -293,6 +360,8 @@ function inventoryTransaction(): InventoryTransaction {
     metadata: {
       ingredientId: "egg",
       nested: { ingredientIds: ["pork", "unknown-legacy"] },
+      externalIngredientId: "pork",
+      providerIngredientIds: ["pork"],
     },
   };
 }
@@ -308,7 +377,7 @@ function recipeIngredientLine(): RecipeIngredientLine {
     preparation: null,
     substitutionGroup: null,
     sortOrder: 0,
-  };
+  } as unknown as RecipeIngredientLine;
 }
 
 function shoppingItem(): ShoppingListItemRecord {
@@ -321,7 +390,7 @@ function shoppingItem(): ShoppingListItemRecord {
     unitId: "unit-piece",
     reason: null,
     status: "needed",
-  };
+  } as unknown as ShoppingListItemRecord;
 }
 
 function recognitionCandidate(): RecognitionCandidate {
@@ -335,7 +404,21 @@ function recognitionCandidate(): RecognitionCandidate {
     status: "corrected",
     sortOrder: 0,
     metadata: {},
-  };
+  } as unknown as RecognitionCandidate;
+}
+
+function unresolvedRecognitionCandidate(): RecognitionCandidate {
+  return {
+    id: "recognition-unresolved",
+    jobId: "job-test",
+    rawLabel: "无法识别",
+    ingredientId: null,
+    correctedIngredientId: null,
+    confidence: null,
+    status: "pending",
+    sortOrder: 1,
+    metadata: {},
+  } as unknown as RecognitionCandidate;
 }
 
 function recommendationRun(): RecommendationRun {

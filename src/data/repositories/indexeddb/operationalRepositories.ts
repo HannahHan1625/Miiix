@@ -22,6 +22,8 @@ import type {
   CookingSessionRecord,
   InventoryLot,
   InventoryTransaction,
+  IngredientFormCode,
+  IngredientProcessState,
   JsonValue,
   MealPlanRecord,
   RecognitionCandidate,
@@ -33,6 +35,7 @@ import type {
   ShoppingListRecord,
 } from "../../../domain/persistence";
 import { IndexedDbContext, createEntityId, nowISO } from "./context";
+import type { CatalogIngredientRecord } from "./schema";
 
 export class IndexedDbInventoryRepository implements InventoryRepository {
   constructor(private readonly context: IndexedDbContext) {}
@@ -58,33 +61,42 @@ export class IndexedDbInventoryRepository implements InventoryRepository {
   }
 
   async createLot(input: CreateInventoryLotInput) {
-    return this.context.write(["inventoryLots", "inventoryTransactions"], async (transaction) => {
-      const timestamp = nowISO();
-      const lot: InventoryLot = {
-        ...input,
-        id: createEntityId("lot"),
-        quantityRemaining: input.quantityInitial,
-        status: "available",
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      };
-      const purchase: InventoryTransaction = {
-        id: createEntityId("transaction"),
-        userId: lot.userId,
-        inventoryLotId: lot.id,
-        cookingSessionId: null,
-        type: "purchase",
-        quantity: lot.quantityInitial,
-        unitId: lot.unitId,
-        idempotencyKey: `initial:${lot.id}`,
-        occurredAt: lot.purchasedAt ?? timestamp,
-        note: "Initial inventory lot balance",
-        metadata: {},
-      };
-      await transaction.objectStore("inventoryLots").add(lot);
-      await transaction.objectStore("inventoryTransactions").add(purchase);
-      return lot;
-    });
+    if (input.originType === "user_transformed" || input.derivedFromLotId !== null) {
+      throw new Error(
+        "Transformed inventory lots require an atomic source-lot transformation workflow",
+      );
+    }
+    return this.context.write(
+      ["catalogIngredients", "inventoryLots", "inventoryTransactions"],
+      async (transaction) => {
+        await assertIngredientSpec(transaction.objectStore("catalogIngredients"), input);
+        const timestamp = nowISO();
+        const lot: InventoryLot = {
+          ...input,
+          id: createEntityId("lot"),
+          quantityRemaining: input.quantityInitial,
+          status: "available",
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        const purchase: InventoryTransaction = {
+          id: createEntityId("transaction"),
+          userId: lot.userId,
+          inventoryLotId: lot.id,
+          cookingSessionId: null,
+          type: "purchase",
+          quantity: lot.quantityInitial,
+          unitId: lot.unitId,
+          idempotencyKey: `initial:${lot.id}`,
+          occurredAt: lot.purchasedAt ?? timestamp,
+          note: "Initial inventory lot balance",
+          metadata: {},
+        };
+        await transaction.objectStore("inventoryLots").add(lot);
+        await transaction.objectStore("inventoryTransactions").add(purchase);
+        return lot;
+      },
+    );
   }
 
   async updateLot(userId: string, lotId: string, input: UpdateInventoryLotInput) {
@@ -208,7 +220,7 @@ export class IndexedDbRecipeRepository implements RecipeRepository {
   async saveRecipe(input: SaveRecipeInput) {
     const recipeId = input.id ?? createEntityId("recipe");
     await this.context.write(
-      ["recipes", "recipeIngredients", "recipeSteps", "recipeTools"],
+      ["catalogIngredients", "recipes", "recipeIngredients", "recipeSteps", "recipeTools"],
       async (transaction) => {
         const { ingredients, steps, toolIds, id: _inputId, ...documentInput } = input;
         const recipeStore = transaction.objectStore("recipes");
@@ -244,6 +256,13 @@ export class IndexedDbRecipeRepository implements RecipeRepository {
         }
 
         for (const ingredient of ingredients) {
+          await assertIngredientSpec(transaction.objectStore("catalogIngredients"), {
+            ingredientId: ingredient.ingredientId,
+            conceptId: ingredient.conceptId,
+            variantId: ingredient.variantId,
+            formCode: ingredient.requiredFormCode,
+            processState: ingredient.requiredProcessState,
+          });
           await ingredientStore.add({
             ...ingredient,
             id: createEntityId("recipe-ingredient"),
@@ -348,7 +367,7 @@ export class IndexedDbPlanningRepository implements PlanningRepository {
     shoppingListId: string,
     items: Omit<ShoppingListItemRecord, "id" | "shoppingListId">[],
   ) {
-    return this.context.write(["shoppingLists", "shoppingItems"], async (transaction) => {
+    return this.context.write(["catalogIngredients", "shoppingLists", "shoppingItems"], async (transaction) => {
       const list = await transaction.objectStore("shoppingLists").get(shoppingListId);
       if (!list || list.userId !== userId) throw new Error(`Shopping list not found: ${shoppingListId}`);
       const itemStore = transaction.objectStore("shoppingItems");
@@ -359,6 +378,13 @@ export class IndexedDbPlanningRepository implements PlanningRepository {
       }
       const records: ShoppingListItemRecord[] = [];
       for (const item of items) {
+        await assertIngredientSpec(transaction.objectStore("catalogIngredients"), {
+          ingredientId: item.ingredientId,
+          conceptId: item.conceptId,
+          variantId: item.variantId,
+          formCode: item.requestedFormCode,
+          processState: item.requestedProcessState,
+        });
         const record = { ...item, id: createEntityId("shopping-item"), shoppingListId };
         await itemStore.add(record);
         records.push(record);
@@ -465,10 +491,26 @@ export class IndexedDbRecognitionRepository implements RecognitionRepository {
   }
 
   async saveCandidates(jobId: string, candidates: SaveRecognitionCandidateInput[]) {
-    return this.context.write(["recognitionCandidates"], async (transaction) => {
+    return this.context.write(["catalogIngredients", "recognitionCandidates"], async (transaction) => {
       const store = transaction.objectStore("recognitionCandidates");
       const records: RecognitionCandidate[] = [];
       for (const candidate of candidates) {
+        const selectedIngredientId = candidate.correctedIngredientId ?? candidate.ingredientId;
+        if (selectedIngredientId) {
+          if (!candidate.conceptId) throw new Error("Recognition candidate conceptId is required");
+          await assertIngredientSpec(transaction.objectStore("catalogIngredients"), {
+            ingredientId: selectedIngredientId,
+            conceptId: candidate.conceptId,
+            variantId: candidate.variantId,
+            formCode: candidate.formCode,
+            processState: candidate.processState,
+          });
+        } else if (candidate.conceptId !== null
+          || candidate.variantId !== null
+          || candidate.formCode !== "unspecified"
+          || candidate.processState !== "unspecified") {
+          throw new Error("Unresolved recognition candidates require an unspecified ingredient spec");
+        }
         const record = { ...candidate, id: createEntityId("recognition-candidate"), jobId };
         await store.add(record);
         records.push(record);
@@ -482,11 +524,25 @@ export class IndexedDbRecognitionRepository implements RecognitionRepository {
     candidateId: string,
     patch: Pick<RecognitionCandidate, "status" | "correctedIngredientId">,
   ) {
-    return this.context.write(["recognitionCandidates"], async (transaction) => {
+    return this.context.write(["recognitionCandidates", "catalogIngredients"], async (transaction) => {
       const store = transaction.objectStore("recognitionCandidates");
       const current = await store.get(candidateId);
       if (!current || current.jobId !== jobId) throw new Error(`Recognition candidate not found: ${candidateId}`);
-      const next = { ...current, ...patch };
+      const selectedIngredientId = patch.correctedIngredientId ?? current.ingredientId;
+      const selected = selectedIngredientId
+        ? await transaction.objectStore("catalogIngredients").get(selectedIngredientId)
+        : null;
+      if (selectedIngredientId && !selected) {
+        throw new Error(`Catalog ingredient not found: ${selectedIngredientId}`);
+      }
+      const next: RecognitionCandidate = {
+        ...current,
+        ...patch,
+        conceptId: selected?.conceptId ?? null,
+        variantId: selected?.variantId ?? null,
+        formCode: selected?.formCode ?? "unspecified",
+        processState: selected?.processState ?? "unspecified",
+      };
       await store.put(next);
       return next;
     });
@@ -560,6 +616,45 @@ export class IndexedDbRecommendationRepository implements RecommendationReposito
         createdAt: nowISO(),
       });
     });
+  }
+}
+
+type CatalogIngredientLookup = {
+  get(id: string): Promise<CatalogIngredientRecord | undefined>;
+};
+
+type PersistedIngredientSpec = {
+  ingredientId: string;
+  conceptId: string;
+  variantId: string | null;
+  formCode: IngredientFormCode;
+  processState: IngredientProcessState;
+};
+
+async function assertIngredientSpec(
+  catalog: CatalogIngredientLookup,
+  spec: PersistedIngredientSpec,
+) {
+  const ingredient = await catalog.get(spec.ingredientId);
+  if (!ingredient) throw new Error(`Catalog ingredient not found: ${spec.ingredientId}`);
+  if (spec.conceptId !== ingredient.conceptId) {
+    throw new Error("Ingredient spec conceptId must match the selected catalog record");
+  }
+  if ((ingredient.recordRole === "variant" || ingredient.recordRole === "form_projection")
+    && spec.variantId !== ingredient.variantId) {
+    throw new Error("Ingredient spec variantId must match the selected catalog projection");
+  }
+  if (ingredient.recordRole === "form_projection" && spec.formCode !== ingredient.formCode) {
+    throw new Error("Ingredient spec formCode must match the selected catalog projection");
+  }
+  if (ingredient.processState !== "unspecified" && spec.processState !== ingredient.processState) {
+    throw new Error("Ingredient spec processState must match the selected catalog record");
+  }
+  if (spec.variantId) {
+    const variant = await catalog.get(spec.variantId);
+    if (!variant || variant.recordRole !== "variant" || variant.conceptId !== spec.conceptId) {
+      throw new Error("Ingredient spec variantId must reference a variant of the same concept");
+    }
   }
 }
 

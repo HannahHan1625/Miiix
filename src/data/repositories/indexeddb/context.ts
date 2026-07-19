@@ -49,6 +49,11 @@ export class IndexedDbContext {
       } catch {
         // The browser may already have aborted the transaction.
       }
+      try {
+        await transaction.done;
+      } catch {
+        // Expected after abort; consume it so callers receive the domain error.
+      }
       throw error;
     }
   }

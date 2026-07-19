@@ -1,14 +1,17 @@
 import type {
   CanonicalIngredient,
   CookingSessionRecord,
+  DataSourceRecord,
   EntityId,
   FoodCategory,
   IngredientAlias,
   IngredientAsset,
+  IngredientFormDefinition,
   IngredientStorageProfile,
   IngredientUnitConversion,
   InventoryLot,
   InventoryTransaction,
+  ImportBatchRecord,
   ISODate,
   ISODateTime,
   JsonValue,
@@ -35,6 +38,10 @@ export type IngredientQuery = {
   categoryId?: EntityId;
   storageMethodId?: EntityId;
   kind?: CanonicalIngredient["kind"];
+  recordRole?: CanonicalIngredient["recordRole"];
+  conceptId?: EntityId;
+  formCode?: CanonicalIngredient["formCode"];
+  isSelectable?: boolean;
   status?: CanonicalIngredient["status"];
   limit?: number;
 };
@@ -50,6 +57,14 @@ export type IngredientDetail = {
   nutritionProfiles: NutritionProfile[];
   assets: IngredientAsset[];
   externalMappings: ExternalIngredientMapping[];
+};
+
+export type ExternalMappingResolution = {
+  requestedIngredientId: EntityId;
+  sourceIngredientId: EntityId;
+  inheritedFromConcept: boolean;
+  effectiveLossiness: ExternalIngredientMapping["lossiness"];
+  mapping: ExternalIngredientMapping;
 };
 
 export type CreateInventoryLotInput = Omit<
@@ -143,6 +158,17 @@ export interface CatalogRepository {
   getIngredient(id: EntityId): Promise<IngredientDetail | null>;
   findIngredients(query: IngredientQuery): Promise<IngredientDetail[]>;
   resolveIngredientAlias(rawLabel: string, locale?: string): Promise<IngredientDetail | null>;
+  resolveLegacyIngredientId(
+    legacyId: string,
+    namespace: "miiix-v0.4.1",
+  ): Promise<IngredientDetail | null>;
+  listExternalMappings(
+    ingredientId: EntityId,
+    usageScope?: ExternalIngredientMapping["usageScopes"][number],
+  ): Promise<ExternalMappingResolution[]>;
+  listSources(): Promise<DataSourceRecord[]>;
+  listImportBatches(sourceId?: EntityId): Promise<ImportBatchRecord[]>;
+  listIngredientForms(): Promise<IngredientFormDefinition[]>;
   listCategories(): Promise<FoodCategory[]>;
   listUnits(): Promise<UnitDefinition[]>;
   listStorageMethods(): Promise<StorageMethod[]>;

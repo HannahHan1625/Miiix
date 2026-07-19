@@ -32,4 +32,24 @@ for (const [index, file] of files.entries()) {
   }
 }
 
+const identityMigration = await readFile(
+  path.join(migrationDirectory, "0007_ingredient_identity_layers.sql"),
+  "utf8",
+);
+const requiredIdentityGuards = [
+  ["immutable published import batches", "published catalog import batches are immutable"],
+  ["exact, lossless Epicure approval", "approved Epicure mappings must be exact and lossless"],
+  ["concept-level Epicure approval", "approved Epicure mappings must attach at concept level"],
+  ["recommendation-scoped Epicure approval", "approved Epicure mappings require recommendation usage on mapping and source"],
+  ["review-scoped Epicure rights", "Epicure corpus rights must remain review-scoped"],
+  ["source-authorized mapping scopes", "external mapping usage scopes must be permitted by its data source"],
+  ["mapping scope updates trigger validation", "review_status, import_batch_id, match_type, usage_scopes, lossiness"],
+];
+
+for (const [label, fragment] of requiredIdentityGuards) {
+  if (!identityMigration.toLowerCase().includes(fragment.toLowerCase())) {
+    throw new Error(`0007_ingredient_identity_layers.sql is missing ${label}.`);
+  }
+}
+
 console.log(`Validated ${files.length} ordered Miiix database migrations: ${files.join(", ")}`);

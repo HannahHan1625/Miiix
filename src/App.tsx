@@ -41,8 +41,8 @@ import { WarehouseView } from "./features/fusion/WarehouseView";
 import { RecipesView } from "./features/recipes/RecipesView";
 import { DiaryView } from "./features/diary/DiaryView";
 
-const PRODUCT_VERSION = "v0.4.2";
-const VERSION_NAME = "食材主数据";
+const PRODUCT_VERSION = "v0.4.2.1";
+const VERSION_NAME = "数据源接入与形态模型";
 const DEFAULT_INGREDIENT_ID = "50000000-0000-4000-8000-000000000002";
 let sharedRepositoryProvider: Promise<IndexedDbRepositoryProvider> | null = null;
 

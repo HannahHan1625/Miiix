@@ -2,9 +2,12 @@ import "fake-indexeddb/auto";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createIndexedDbRepositoryProvider, type IndexedDbRepositoryProvider } from "./provider";
-import { deleteMiiixDatabase } from "./schema";
+import { deleteMiiixDatabase, openMiiixDatabase } from "./schema";
 
 const TOMATO_ID = "50000000-0000-4000-8000-000000000011";
+const PORK_CONCEPT_ID = "50000000-0000-4000-8000-000000000006";
+const GROUND_PORK_ID = "50000000-0000-4000-8000-000000000007";
+const CHICKEN_FEET_ID = "50000000-0000-4000-8000-000000000004";
 const TOMATO_CATEGORY_IDS = [
   "40000000-0000-4000-8000-000000000002",
   "40000000-0000-4000-8000-000000000010",
@@ -38,7 +41,7 @@ describe("IndexedDbCatalogRepository", () => {
       ingredient: {
         id: TOMATO_ID,
         canonicalNameZh: "番茄",
-        dataVersion: "2026-07-19.2",
+        dataVersion: "0.4.2.1",
         status: "active",
       },
       categoryIds: TOMATO_CATEGORY_IDS,
@@ -69,8 +72,9 @@ describe("IndexedDbCatalogRepository", () => {
     await expect(provider.repositories.catalog.findIngredients({ text: "红柿" })).resolves.toMatchObject([
       { ingredient: { id: TOMATO_ID } },
     ]);
-    await expect(provider.repositories.catalog.findIngredients({ text: " 肉 沫 " })).resolves.toMatchObject([
-      { ingredient: { canonicalNameZh: "猪肉末" } },
+    await expect(provider.repositories.catalog.findIngredients({ text: " 肉 沫 " })).resolves.toEqual([]);
+    await expect(provider.repositories.catalog.findIngredients({ text: "猪肉末" })).resolves.toMatchObject([
+      { ingredient: { id: GROUND_PORK_ID, conceptId: PORK_CONCEPT_ID, formCode: "ground" } },
     ]);
   });
 
@@ -78,9 +82,20 @@ describe("IndexedDbCatalogRepository", () => {
     await expect(provider.repositories.catalog.resolveIngredientAlias("西红柿")).resolves.toMatchObject({
       ingredient: { id: TOMATO_ID },
     });
-    await expect(provider.repositories.catalog.resolveIngredientAlias("肉沫")).resolves.toMatchObject({
-      ingredient: { canonicalNameZh: "猪肉末" },
+    await expect(provider.repositories.catalog.resolveIngredientAlias("肉沫")).resolves.toBeNull();
+    await expect(provider.repositories.catalog.resolveIngredientAlias("肉糜")).resolves.toBeNull();
+    await expect(provider.repositories.catalog.resolveIngredientAlias("pork", "en")).resolves.toMatchObject({
+      ingredient: { id: PORK_CONCEPT_ID, canonicalNameZh: "猪肉（部位未指定）" },
     });
+    await expect(provider.repositories.catalog.resolveIngredientAlias("ground pork", "en")).resolves.toMatchObject({
+      ingredient: { id: GROUND_PORK_ID, conceptId: PORK_CONCEPT_ID, formCode: "ground" },
+    });
+    await expect(provider.repositories.catalog.resolveIngredientAlias("minced pork", "en")).resolves.toMatchObject({
+      ingredient: { id: GROUND_PORK_ID },
+    });
+    await expect(
+      provider.repositories.catalog.resolveLegacyIngredientId("pork", "miiix-v0.4.1"),
+    ).resolves.toMatchObject({ ingredient: { id: GROUND_PORK_ID } });
     await expect(provider.repositories.catalog.resolveIngredientAlias("鲜鸡蛋")).resolves.toBeNull();
     await expect(provider.repositories.catalog.resolveIngredientAlias("酱油")).resolves.toBeNull();
   });
@@ -111,10 +126,13 @@ describe("IndexedDbCatalogRepository", () => {
   });
 
   it("lists catalog reference data from IndexedDB while retaining tool projection", async () => {
-    const [categories, units, storageMethods, tools] = await Promise.all([
+    const [categories, units, storageMethods, sources, batches, forms, tools] = await Promise.all([
       provider.repositories.catalog.listCategories(),
       provider.repositories.catalog.listUnits(),
       provider.repositories.catalog.listStorageMethods(),
+      provider.repositories.catalog.listSources(),
+      provider.repositories.catalog.listImportBatches(),
+      provider.repositories.catalog.listIngredientForms(),
       provider.repositories.catalog.listKitchenTools(),
     ]);
 
@@ -127,6 +145,86 @@ describe("IndexedDbCatalogRepository", () => {
       "fridge",
       "room",
     ]);
+    expect(sources).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "10000000-0000-4000-8000-000000000007",
+        sourceRevision: "03edd31",
+        rightsReviewStatus: "review_required",
+        usageScopes: expect.arrayContaining(["identity", "recommendation"]),
+      }),
+    ]));
+    expect(batches).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "b0000000-0000-4000-8000-000000000001",
+        sourceRevision: "03edd31",
+        status: "published",
+      }),
+    ]));
+    expect(forms.map((form) => form.code)).toEqual([
+      "diced",
+      "ground",
+      "shredded",
+      "sliced",
+      "unspecified",
+      "whole_piece",
+    ]);
     expect(tools.length).toBeGreaterThan(0);
+  });
+
+  it("inherits concept-level Epicure mappings without erasing the requested form", async () => {
+    await expect(provider.repositories.catalog.listExternalMappings(
+      GROUND_PORK_ID,
+      "recommendation",
+    )).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        requestedIngredientId: GROUND_PORK_ID,
+        sourceIngredientId: PORK_CONCEPT_ID,
+        inheritedFromConcept: true,
+        effectiveLossiness: expect.arrayContaining(["form"]),
+        mapping: expect.objectContaining({
+          provider: "Epicure_Cooc",
+          externalKey: "1264",
+          externalVersion: "03edd31",
+        }),
+      }),
+    ]));
+  });
+
+  it("serves only approved mappings and never inherits a record-level mapping", async () => {
+    await expect(provider.repositories.catalog.listExternalMappings(
+      CHICKEN_FEET_ID,
+      "recommendation",
+    )).resolves.toEqual([]);
+
+    const database = await openMiiixDatabase(databaseName);
+    const concept = await database.get("catalogIngredients", PORK_CONCEPT_ID);
+    expect(concept).toBeDefined();
+    if (!concept) throw new Error("Missing pork concept fixture");
+    const conceptMapping = concept.detail.externalMappings[0];
+    concept.detail.externalMappings.push({
+      ...conceptMapping,
+      id: "mapping-record-only-test",
+      externalKey: "record-only-token",
+      mappingLevel: "record",
+    });
+    await database.put("catalogIngredients", concept);
+    database.close();
+
+    const mappings = await provider.repositories.catalog.listExternalMappings(
+      GROUND_PORK_ID,
+      "recommendation",
+    );
+    expect(mappings.some((resolution) => resolution.mapping.externalKey === "record-only-token"))
+      .toBe(false);
+  });
+
+  it("filters the catalog by concept, record role, and physical form", async () => {
+    await expect(provider.repositories.catalog.findIngredients({
+      conceptId: PORK_CONCEPT_ID,
+      recordRole: "form_projection",
+      formCode: "ground",
+    })).resolves.toMatchObject([
+      { ingredient: { id: GROUND_PORK_ID } },
+    ]);
   });
 });

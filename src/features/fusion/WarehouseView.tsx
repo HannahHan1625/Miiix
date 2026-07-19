@@ -380,6 +380,10 @@ function buildFusionRecipe(
     selectedTool.id === "oven" ? 8 : selectedTool.id === "steamer" ? 4 : selectedTool.id === "coffee" ? 3 : selectedTool.id === "soyMilk" ? 12 : 0;
   const mainIngredients = selectedItems.map((item) => ({
     ingredientId: item.id,
+    conceptId: item.conceptId,
+    variantId: item.variantId,
+    formCode: item.formCode,
+    processState: item.processState,
     name: item.name,
     role: "main" as const,
   }));
@@ -387,7 +391,15 @@ function buildFusionRecipe(
     .flatMap((ingredientId) => {
       const food = catalogFoods.find((item) => item.id === ingredientId);
       return food
-        ? [{ ingredientId: food.id, name: food.name, role: "seasoning" as const }]
+        ? [{
+            ingredientId: food.id,
+            conceptId: food.conceptId,
+            variantId: food.variantId,
+            formCode: food.formCode,
+            processState: food.processState,
+            name: food.name,
+            role: "seasoning" as const,
+          }]
         : [];
     });
   const ingredients = Array.from(

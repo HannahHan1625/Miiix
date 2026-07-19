@@ -6,6 +6,24 @@ export type IngredientStatus = "draft" | "active" | "archived";
 export type IngredientKind = "raw" | "processed" | "condiment" | "beverage" | "dish_component";
 export type UnitDimension = "count" | "mass" | "volume" | "package";
 export type AmountMode = UnitDimension;
+export type IngredientFormCode =
+  | "unspecified"
+  | "whole_piece"
+  | "sliced"
+  | "diced"
+  | "shredded"
+  | "ground";
+export type IngredientProcessState = "unspecified" | "raw" | "cooked" | "processed";
+export type CatalogRecordRole = "concept" | "variant" | "form_projection";
+export type CatalogUsageScope = "identity" | "nutrition" | "storage" | "recommendation" | "image";
+export type MappingLossiness = "form" | "variant" | "process_state" | "species" | "product_type";
+export type CatalogJsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | CatalogJsonValue[]
+  | { [key: string]: CatalogJsonValue };
 
 export type CatalogSource = {
   id: UUID;
@@ -14,11 +32,47 @@ export type CatalogSource = {
   version: string;
   sourceUrl: string;
   license: string;
+  licenseCode: string;
+  licenseUrl: string | null;
   jurisdiction: string;
+  sourceType: "curated" | "standard" | "guidance" | "dataset" | "model";
+  sourceRevision: string;
+  usageScopes: CatalogUsageScope[];
+  rightsReviewStatus: "approved" | "citation_only" | "review_required" | "restricted";
+  redistributionStatus: "allowed" | "attribution_required" | "metadata_only" | "prohibited";
+  attributionRequired: boolean;
+  snapshotSha256: string | null;
+  importerVersion: string | null;
   retrievedAt: ISODateTime;
   reviewedAt: ISODateTime;
   reviewStatus: ReviewStatus;
   notes: string | null;
+};
+
+export type CatalogImportBatch = {
+  id: UUID;
+  sourceId: UUID;
+  sourceRevision: string;
+  importerVersion: string;
+  importedAt: ISODateTime;
+  reviewedAt: ISODateTime;
+  reviewedBy: string;
+  inputRecordCount: number;
+  acceptedMappingCount: number;
+  pendingMappingCount: number;
+  rejectedRecordCount: number;
+  recordsSha256: string;
+  status: "staged" | "published" | "rejected";
+  notes: string | null;
+};
+
+export type CatalogIngredientForm = {
+  code: IngredientFormCode;
+  nameZh: string;
+  nameEn: string;
+  description: string;
+  status: "active" | "archived";
+  dataVersion: string;
 };
 
 export type CatalogUnit = {
@@ -79,6 +133,8 @@ export type CatalogStorageProfile = {
   recommendedDays: number | null;
   context: string;
   foodState: string;
+  formCode: IngredientFormCode;
+  processState: IngredientProcessState;
   packagingState: string;
   endpoint: "quality" | "safety" | "package_label";
   instructions: string;
@@ -93,14 +149,21 @@ export type CatalogStorageProfile = {
 export type CatalogExternalMapping = {
   id: UUID;
   ingredientId: UUID;
-  system: "USDA_SR28_NDB" | "USDA_FDC" | "FoodKeeper" | "other";
+  system: "USDA_SR28_NDB" | "USDA_FDC" | "FoodKeeper" | "Epicure_Cooc" | "other";
   externalId: string;
   externalName: string;
+  externalVersion: string;
   sourceId: UUID;
-  matchType: "exact" | "representative" | "broader" | "narrower";
+  importBatchId: UUID | null;
+  matchType: "exact" | "representative" | "broader" | "narrower" | "related";
+  mappingLevel: "record" | "concept";
+  usageScopes: CatalogUsageScope[];
+  lossiness: MappingLossiness[];
+  confidence: number;
   reviewStatus: ReviewStatus;
   reviewedAt: ISODateTime;
   reviewedBy: string;
+  metadata: Record<string, CatalogJsonValue>;
 };
 
 export type CatalogNutritionProfile = {
@@ -115,6 +178,8 @@ export type CatalogNutritionProfile = {
   fiberG: number | null;
   dataClassification: "analytical" | "calculated" | "estimated" | "unknown";
   foodState: string | null;
+  formCode: IngredientFormCode;
+  processState: IngredientProcessState;
   sourceRecordId: string | null;
   sourceRelease: string | null;
   matchType: "exact" | "representative" | "broader" | "narrower" | "none";
@@ -174,6 +239,12 @@ export type IngredientDetail = {
   canonicalNameEn: string | null;
   scientificName: string | null;
   kind: IngredientKind;
+  recordRole: CatalogRecordRole;
+  conceptId: UUID;
+  variantId: UUID | null;
+  formCode: IngredientFormCode;
+  processState: IngredientProcessState;
+  isSelectable: boolean;
   categoryId: UUID;
   categoryLevel1Id: UUID;
   categoryLevel2Id: UUID;
@@ -208,6 +279,8 @@ export type IngredientCatalogDocument = {
   reviewedAt: ISODateTime;
   reviewedBy: string;
   sources: CatalogSource[];
+  importBatches: CatalogImportBatch[];
+  ingredientForms: CatalogIngredientForm[];
   units: CatalogUnit[];
   storageMethods: CatalogStorageMethod[];
   categories: CatalogCategory[];

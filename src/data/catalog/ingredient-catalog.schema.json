@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/HannahHan1625/Miiix/schemas/ingredient-catalog-v1.json",
+  "$id": "https://github.com/HannahHan1625/Miiix/schemas/ingredient-catalog-v1.1.json",
   "title": "Miiix ingredient catalog document",
-  "description": "Machine-checkable contract for the v0.4.2 golden ingredient catalog.",
+  "description": "Machine-checkable contract for the v0.4.2.1 governed ingredient catalog.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -13,6 +13,8 @@
     "reviewedAt",
     "reviewedBy",
     "sources",
+    "importBatches",
+    "ingredientForms",
     "units",
     "storageMethods",
     "categories",
@@ -21,11 +23,11 @@
   "properties": {
     "schemaVersion": {
       "type": "string",
-      "minLength": 1
+      "const": "1.1.0"
     },
     "catalogVersion": {
       "type": "string",
-      "const": "0.4.2"
+      "const": "0.4.2.1"
     },
     "dataVersion": {
       "type": "string",
@@ -46,6 +48,20 @@
       "minItems": 4,
       "items": {
         "$ref": "#/$defs/source"
+      }
+    },
+    "importBatches": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/importBatch"
+      }
+    },
+    "ingredientForms": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "$ref": "#/$defs/ingredientForm"
       }
     },
     "units": {
@@ -95,6 +111,205 @@
         "rejected"
       ]
     },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "usageScope": {
+      "type": "string",
+      "enum": [
+        "identity",
+        "nutrition",
+        "storage",
+        "recommendation",
+        "image"
+      ]
+    },
+    "usageScopes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/usageScope"
+      }
+    },
+    "formCode": {
+      "type": "string",
+      "enum": [
+        "unspecified",
+        "whole_piece",
+        "sliced",
+        "diced",
+        "shredded",
+        "ground"
+      ]
+    },
+    "processState": {
+      "type": "string",
+      "enum": [
+        "unspecified",
+        "raw",
+        "cooked",
+        "processed"
+      ]
+    },
+    "jsonValue": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/jsonValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/jsonValue"
+          }
+        }
+      ]
+    },
+    "jsonObject": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/jsonValue"
+      }
+    },
+    "importBatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sourceId",
+        "sourceRevision",
+        "importerVersion",
+        "importedAt",
+        "reviewedAt",
+        "reviewedBy",
+        "inputRecordCount",
+        "acceptedMappingCount",
+        "pendingMappingCount",
+        "rejectedRecordCount",
+        "recordsSha256",
+        "status",
+        "notes"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "sourceId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "sourceRevision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "importerVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "importedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "reviewedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "reviewedBy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "inputRecordCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "acceptedMappingCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pendingMappingCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rejectedRecordCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "recordsSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "staged",
+            "published",
+            "rejected"
+          ]
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "ingredientForm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "nameZh",
+        "nameEn",
+        "description",
+        "status",
+        "dataVersion"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/formCode"
+        },
+        "nameZh": {
+          "type": "string",
+          "minLength": 1
+        },
+        "nameEn": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "archived"
+          ]
+        },
+        "dataVersion": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "source": {
       "type": "object",
       "additionalProperties": false,
@@ -105,7 +320,17 @@
         "version",
         "sourceUrl",
         "license",
+        "licenseCode",
+        "licenseUrl",
         "jurisdiction",
+        "sourceType",
+        "sourceRevision",
+        "usageScopes",
+        "rightsReviewStatus",
+        "redistributionStatus",
+        "attributionRequired",
+        "snapshotSha256",
+        "importerVersion",
         "retrievedAt",
         "reviewedAt",
         "reviewStatus",
@@ -135,9 +360,83 @@
           "type": "string",
           "minLength": 1
         },
+        "licenseCode": {
+          "type": "string",
+          "minLength": 1
+        },
+        "licenseUrl": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "jurisdiction": {
           "type": "string",
           "minLength": 1
+        },
+        "sourceType": {
+          "type": "string",
+          "enum": [
+            "curated",
+            "standard",
+            "guidance",
+            "dataset",
+            "model"
+          ]
+        },
+        "sourceRevision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "usageScopes": {
+          "$ref": "#/$defs/usageScopes"
+        },
+        "rightsReviewStatus": {
+          "type": "string",
+          "enum": [
+            "approved",
+            "citation_only",
+            "review_required",
+            "restricted"
+          ]
+        },
+        "redistributionStatus": {
+          "type": "string",
+          "enum": [
+            "allowed",
+            "attribution_required",
+            "metadata_only",
+            "prohibited"
+          ]
+        },
+        "attributionRequired": {
+          "type": "boolean"
+        },
+        "snapshotSha256": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "importerVersion": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "retrievedAt": {
           "$ref": "#/$defs/dateTime"
@@ -447,6 +746,8 @@
         "recommendedDays",
         "context",
         "foodState",
+        "formCode",
+        "processState",
         "packagingState",
         "endpoint",
         "instructions",
@@ -521,6 +822,12 @@
           "type": "string",
           "minLength": 1
         },
+        "formCode": {
+          "$ref": "#/$defs/formCode"
+        },
+        "processState": {
+          "$ref": "#/$defs/processState"
+        },
         "packagingState": {
           "type": "string",
           "minLength": 1
@@ -576,11 +883,18 @@
         "system",
         "externalId",
         "externalName",
+        "externalVersion",
         "sourceId",
+        "importBatchId",
         "matchType",
+        "mappingLevel",
+        "usageScopes",
+        "lossiness",
+        "confidence",
         "reviewStatus",
         "reviewedAt",
-        "reviewedBy"
+        "reviewedBy",
+        "metadata"
       ],
       "properties": {
         "id": {
@@ -595,6 +909,7 @@
             "USDA_SR28_NDB",
             "USDA_FDC",
             "FoodKeeper",
+            "Epicure_Cooc",
             "other"
           ]
         },
@@ -606,8 +921,22 @@
           "type": "string",
           "minLength": 1
         },
+        "externalVersion": {
+          "type": "string",
+          "minLength": 1
+        },
         "sourceId": {
           "$ref": "#/$defs/uuid"
+        },
+        "importBatchId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "matchType": {
           "type": "string",
@@ -615,8 +944,38 @@
             "exact",
             "representative",
             "broader",
-            "narrower"
+            "narrower",
+            "related"
           ]
+        },
+        "mappingLevel": {
+          "type": "string",
+          "enum": [
+            "record",
+            "concept"
+          ]
+        },
+        "usageScopes": {
+          "$ref": "#/$defs/usageScopes"
+        },
+        "lossiness": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "form",
+              "variant",
+              "process_state",
+              "species",
+              "product_type"
+            ]
+          }
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         },
         "reviewStatus": {
           "$ref": "#/$defs/reviewStatus"
@@ -627,6 +986,9 @@
         "reviewedBy": {
           "type": "string",
           "minLength": 1
+        },
+        "metadata": {
+          "$ref": "#/$defs/jsonObject"
         }
       }
     },
@@ -645,6 +1007,8 @@
         "fiberG",
         "dataClassification",
         "foodState",
+        "formCode",
+        "processState",
         "sourceRecordId",
         "sourceRelease",
         "matchType",
@@ -742,6 +1106,12 @@
               "type": "null"
             }
           ]
+        },
+        "formCode": {
+          "$ref": "#/$defs/formCode"
+        },
+        "processState": {
+          "$ref": "#/$defs/processState"
         },
         "sourceRecordId": {
           "anyOf": [
@@ -1088,6 +1458,12 @@
         "canonicalNameEn",
         "scientificName",
         "kind",
+        "recordRole",
+        "conceptId",
+        "variantId",
+        "formCode",
+        "processState",
+        "isSelectable",
         "categoryId",
         "categoryLevel1Id",
         "categoryLevel2Id",
@@ -1164,6 +1540,36 @@
             "beverage",
             "dish_component"
           ]
+        },
+        "recordRole": {
+          "type": "string",
+          "enum": [
+            "concept",
+            "variant",
+            "form_projection"
+          ]
+        },
+        "conceptId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "variantId": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "formCode": {
+          "$ref": "#/$defs/formCode"
+        },
+        "processState": {
+          "$ref": "#/$defs/processState"
+        },
+        "isSelectable": {
+          "type": "boolean"
         },
         "categoryId": {
           "$ref": "#/$defs/uuid"

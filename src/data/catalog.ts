@@ -4,6 +4,7 @@ import type { FoodPreference, KitchenTool, Recipe } from "../domain/recipe";
 import {
   catalogCategoryTree,
   catalogFoodLibrary,
+  getLegacyProjectedFood,
   getProjectedFood,
 } from "./catalogProjection";
 
@@ -39,27 +40,35 @@ export const categoryTree = catalogCategoryTree.map((category, index) => ({
 
 export const foodLibrary = catalogFoodLibrary;
 
-function requiredProjectedFood(idOrLegacyId: string) {
-  const food = getProjectedFood(idOrLegacyId);
-  if (!food) throw new Error(`Missing catalog projection: ${idOrLegacyId}`);
+function requiredLegacyFixtureFood(legacyId: string) {
+  // Demo fixtures are the only place where v0.4.1 technical IDs are accepted.
+  // Natural-language and stable-ID paths must use the explicit projection APIs.
+  const food = getLegacyProjectedFood(legacyId);
+  if (!food) throw new Error(`Missing legacy catalog fixture: ${legacyId}`);
+  return food;
+}
+
+function requiredStableFixtureFood(ingredientId: string) {
+  const food = getProjectedFood(ingredientId);
+  if (!food) throw new Error(`Missing stable catalog fixture: ${ingredientId}`);
   return food;
 }
 
 export const recognitionPresets: Record<Exclude<UploadMethod, "manual">, Array<{ foodId: string; confidence: number }>> = {
   photo: [
-    { foodId: requiredProjectedFood("chickenWing").id, confidence: 92 },
-    { foodId: requiredProjectedFood("pepper").id, confidence: 84 },
-    { foodId: requiredProjectedFood("egg").id, confidence: 79 },
+    { foodId: requiredLegacyFixtureFood("chickenWing").id, confidence: 92 },
+    { foodId: requiredLegacyFixtureFood("pepper").id, confidence: 84 },
+    { foodId: requiredLegacyFixtureFood("egg").id, confidence: 79 },
   ],
   online: [
-    { foodId: requiredProjectedFood("peach").id, confidence: 91 },
-    { foodId: requiredProjectedFood("yangmei").id, confidence: 88 },
-    { foodId: requiredProjectedFood("lemon").id, confidence: 76 },
+    { foodId: requiredLegacyFixtureFood("peach").id, confidence: 91 },
+    { foodId: requiredLegacyFixtureFood("yangmei").id, confidence: 88 },
+    { foodId: requiredLegacyFixtureFood("lemon").id, confidence: 76 },
   ],
   receipt: [
-    { foodId: requiredProjectedFood("eggplant").id, confidence: 89 },
-    { foodId: requiredProjectedFood("pork").id, confidence: 83 },
-    { foodId: requiredProjectedFood("soy").id, confidence: 71 },
+    { foodId: requiredLegacyFixtureFood("eggplant").id, confidence: 89 },
+    { foodId: requiredLegacyFixtureFood("pork").id, confidence: 83 },
+    { foodId: requiredLegacyFixtureFood("soy").id, confidence: 71 },
   ],
 };
 
@@ -121,7 +130,7 @@ export const foodPreferences: FoodPreference[] = [
 ];
 
 function stocked(foodId: string, amount: number, mode: AmountMode, addedDaysAgo: number, pricePaid: number): InventoryItem {
-  const base = requiredProjectedFood(foodId);
+  const base = requiredLegacyFixtureFood(foodId);
   return {
     ...base,
     inventoryId: `${foodId}-${addedDaysAgo}`,
@@ -136,8 +145,27 @@ function stocked(foodId: string, amount: number, mode: AmountMode, addedDaysAgo:
 }
 
 function recipeIngredient(idOrLegacyId: string, role: Recipe["ingredients"][number]["role"]) {
-  const food = requiredProjectedFood(idOrLegacyId);
-  return { ingredientId: food.id, name: food.name, role };
+  const food = requiredLegacyFixtureFood(idOrLegacyId);
+  return recipeIngredientFromFood(food, role);
+}
+
+function recipeIngredientByStableId(ingredientId: string, role: Recipe["ingredients"][number]["role"]) {
+  return recipeIngredientFromFood(requiredStableFixtureFood(ingredientId), role);
+}
+
+function recipeIngredientFromFood(
+  food: ReturnType<typeof requiredStableFixtureFood>,
+  role: Recipe["ingredients"][number]["role"],
+) {
+  return {
+    ingredientId: food.id,
+    conceptId: food.conceptId,
+    variantId: food.variantId,
+    formCode: food.formCode,
+    processState: food.processState,
+    name: food.name,
+    role,
+  };
 }
 
 export const initialInventory: InventoryItem[] = [
@@ -154,7 +182,7 @@ export const initialInventory: InventoryItem[] = [
 export const recipesSeed: Recipe[] = [
   {
     id: "eggplant-pork-rice",
-    title: "肉沫青椒茄子盖饭",
+    title: "猪肉末青椒茄子盖饭",
     cuisine: "江浙家常",
     difficulty: "认真",
     minutes: 18,
@@ -168,8 +196,8 @@ export const recipesSeed: Recipe[] = [
       recipeIngredient("soy", "seasoning"),
     ],
     toolId: "wok",
-    reason: "把临期肉沫和茄子变成完整一餐，风险低但满足感高。",
-    steps: ["茄子切条，青椒切块。", "肉沫炒散，加生抽。", "放茄子焖软，下青椒收汁。", "盖到米饭上。"],
+    reason: "把临期猪肉末和茄子变成完整一餐，风险低但满足感高。",
+    steps: ["茄子切条，青椒切块。", "猪肉末炒散，加生抽。", "放茄子焖软，下青椒收汁。", "盖到米饭上。"],
   },
   {
     id: "yangmei-peach-soda",
@@ -183,7 +211,7 @@ export const recipesSeed: Recipe[] = [
       recipeIngredient("yangmei", "main"),
       recipeIngredient("peach", "main"),
       recipeIngredient("lemon", "seasoning"),
-      recipeIngredient("white-sugar", "seasoning"),
+      recipeIngredientByStableId("50000000-0000-4000-8000-000000000030", "seasoning"),
     ],
     toolId: "juicer",
     reason: "不烧菜也能优先消耗好水果，适合一个人偷懒但想精致一点。",
@@ -191,7 +219,7 @@ export const recipesSeed: Recipe[] = [
   },
   {
     id: "steamed-egg",
-    title: "青椒肉沫蒸蛋",
+    title: "青椒猪肉末蒸蛋",
     cuisine: "中式蒸菜",
     difficulty: "轻松",
     minutes: 15,
@@ -205,7 +233,7 @@ export const recipesSeed: Recipe[] = [
     ],
     toolId: "steamer",
     reason: "洗碗少，口感软，适合冰箱里东西不多的时候。",
-    steps: ["鸡蛋加温水打散。", "肉沫炒香铺底。", "蒸 10 分钟后撒青椒碎和生抽。"],
+    steps: ["鸡蛋加温水打散。", "猪肉末炒香铺底。", "蒸 10 分钟后撒青椒碎和生抽。"],
   },
   {
     id: "pepper-egg",

@@ -3,6 +3,8 @@ import type {
   DataSourceRecord,
   ExternalIngredientMapping,
   FoodCategory,
+  ImportBatchRecord,
+  IngredientFormDefinition,
   IngredientAlias,
   IngredientAsset,
   IngredientStorageProfile,
@@ -26,7 +28,7 @@ import type {
   IngredientDetail as SeedIngredientDetail,
 } from "../../catalog/types";
 import { normalizeCatalogLabel } from "../../catalog/normalize";
-import { assertValidIngredientCatalog, v042GoldenCatalog } from "../../catalog/validation";
+import { assertValidIngredientCatalog, v0421GoldenCatalog } from "../../catalog/validation";
 import { IndexedDbContext } from "./context";
 import type { CatalogIngredientRecord, MiiixIndexedDbSchema } from "./schema";
 
@@ -34,11 +36,13 @@ export const CATALOG_SEED_VERSION_META_KEY = "catalog-seed-version";
 export const CATALOG_SEED_DIGEST_META_KEY = "catalog-seed-digest";
 export const CATALOG_SEED_STATS_META_KEY = "catalog-seed-stats";
 export const CATALOG_REFERENCE_MIGRATION_META_KEY = "catalog-reference-migration-version";
-const CATALOG_REFERENCE_MIGRATION_VERSION = 2;
+const CATALOG_REFERENCE_MIGRATION_VERSION = 3;
 
 const CATALOG_SEED_STORES = [
   "meta",
   "catalogSources",
+  "catalogImportBatches",
+  "catalogIngredientForms",
   "catalogCategories",
   "catalogUnits",
   "catalogStorageMethods",
@@ -57,7 +61,8 @@ export type CatalogSeedResult = {
   catalogVersion: string;
   digest: string;
   ingredientCount: number;
-  migratedReferenceCount: number;
+  /** Number of persisted operational fields changed by the compatibility migration. */
+  migratedFieldCount: number;
 };
 
 export type CatalogSeedOptions = {
@@ -72,7 +77,7 @@ export type CatalogSeedOptions = {
  */
 export async function ensureCatalogSeed(
   context: IndexedDbContext,
-  document: IngredientCatalogDocument = v042GoldenCatalog,
+  document: IngredientCatalogDocument = v0421GoldenCatalog,
   options: CatalogSeedOptions = {},
 ): Promise<CatalogSeedResult> {
   assertValidIngredientCatalog(document, { releasePolicy: null });
@@ -92,6 +97,13 @@ export async function ensureCatalogSeed(
     };
   });
 
+  assertCatalogRevisionIsImmutable(
+    current.version,
+    current.digest,
+    document.catalogVersion,
+    digest,
+  );
+
   if (current.version === document.catalogVersion
     && current.digest === digest
     && current.referenceMigration === CATALOG_REFERENCE_MIGRATION_VERSION) {
@@ -100,7 +112,7 @@ export async function ensureCatalogSeed(
       catalogVersion: document.catalogVersion,
       digest,
       ingredientCount: document.ingredients.length,
-      migratedReferenceCount: 0,
+      migratedFieldCount: 0,
     };
   }
 
@@ -113,6 +125,12 @@ export async function ensureCatalogSeed(
     ]);
     const catalogIsCurrent = transactionVersion?.value === document.catalogVersion
       && transactionDigest?.value === digest;
+    assertCatalogRevisionIsImmutable(
+      transactionVersion?.value,
+      transactionDigest?.value,
+      document.catalogVersion,
+      digest,
+    );
     const referenceMigrationIsCurrent = transactionReferenceMigration?.value
       === CATALOG_REFERENCE_MIGRATION_VERSION;
     if (catalogIsCurrent && referenceMigrationIsCurrent) {
@@ -121,11 +139,13 @@ export async function ensureCatalogSeed(
         catalogVersion: document.catalogVersion,
         digest,
         ingredientCount: document.ingredients.length,
-        migratedReferenceCount: 0,
+        migratedFieldCount: 0,
       };
     }
 
     const sourceStore = transaction.objectStore("catalogSources");
+    const importBatchStore = transaction.objectStore("catalogImportBatches");
+    const ingredientFormStore = transaction.objectStore("catalogIngredientForms");
     const categoryStore = transaction.objectStore("catalogCategories");
     const unitStore = transaction.objectStore("catalogUnits");
     const storageMethodStore = transaction.objectStore("catalogStorageMethods");
@@ -134,6 +154,8 @@ export async function ensureCatalogSeed(
     if (!catalogIsCurrent) {
       await Promise.all([
         sourceStore.clear(),
+        importBatchStore.clear(),
+        ingredientFormStore.clear(),
         categoryStore.clear(),
         unitStore.clear(),
         storageMethodStore.clear(),
@@ -141,6 +163,8 @@ export async function ensureCatalogSeed(
       ]);
 
       for (const source of document.sources) await sourceStore.put(toDataSourceRecord(source));
+      for (const batch of document.importBatches) await importBatchStore.put(toImportBatchRecord(batch));
+      for (const form of document.ingredientForms) await ingredientFormStore.put(toIngredientFormDefinition(form));
       for (const category of document.categories) await categoryStore.put(toFoodCategory(category));
       for (const unit of document.units) await unitStore.put(toUnitDefinition(unit));
       for (const method of document.storageMethods) {
@@ -152,11 +176,13 @@ export async function ensureCatalogSeed(
     }
 
     const legacyIds = createLegacyIngredientIdMap(document.ingredients);
+    const ingredientById = new Map(document.ingredients.map((ingredient) => [ingredient.id, ingredient]));
     const catalogReferences = createLegacyCatalogReferenceMaps(document);
-    const migratedReferenceCount = await migrateOperationalIngredientReferences(
+    const migratedFieldCount = await migrateOperationalIngredientReferences(
       transaction,
       legacyIds,
       catalogReferences,
+      ingredientById,
     );
 
     try {
@@ -184,17 +210,17 @@ export async function ensureCatalogSeed(
       value: {
         catalogVersion: document.catalogVersion,
         ingredientCount: document.ingredients.length,
-        migratedReferenceCount,
+        migratedFieldCount,
         referenceMigrationVersion: CATALOG_REFERENCE_MIGRATION_VERSION,
       },
     });
 
     return {
-      changed: !catalogIsCurrent || !referenceMigrationIsCurrent || migratedReferenceCount > 0,
+      changed: !catalogIsCurrent || !referenceMigrationIsCurrent || migratedFieldCount > 0,
       catalogVersion: document.catalogVersion,
       digest,
       ingredientCount: document.ingredients.length,
-      migratedReferenceCount,
+      migratedFieldCount,
     };
   });
 }
@@ -207,6 +233,19 @@ export function digestCatalogDocument(document: IngredientCatalogDocument) {
     hash = Math.imul(hash, 0x01000193);
   }
   return `fnv1a32:${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+function assertCatalogRevisionIsImmutable(
+  storedVersion: unknown,
+  storedDigest: unknown,
+  incomingVersion: string,
+  incomingDigest: string,
+) {
+  if (storedVersion === incomingVersion && storedDigest !== incomingDigest) {
+    throw new Error(
+      `Catalog version ${incomingVersion} already exists with a different digest; bump catalogVersion before importing changed data.`,
+    );
+  }
 }
 
 export function aliasLookupKey(locale: string, normalizedAlias: string) {
@@ -241,6 +280,12 @@ export function toCatalogIngredientRecord(seed: SeedIngredientDetail): CatalogIn
     categoryIds: [...seed.categoryIds],
     storageMethodIds: unique(seed.storageProfiles.map((profile) => profile.storageMethodId)),
     kind: detail.ingredient.kind,
+    recordRole: detail.ingredient.recordRole,
+    conceptId: detail.ingredient.conceptId,
+    variantId: detail.ingredient.variantId,
+    formCode: detail.ingredient.formCode,
+    processState: detail.ingredient.processState,
+    isSelectable: detail.ingredient.isSelectable,
     status: detail.ingredient.status,
     detail,
   };
@@ -255,10 +300,16 @@ function toRepositoryIngredientDetail(seed: SeedIngredientDetail): RepositoryIng
       canonicalNameEn: seed.canonicalNameEn,
       scientificName: seed.scientificName,
       kind: seed.kind,
+      recordRole: seed.recordRole,
+      conceptId: seed.conceptId,
+      variantId: seed.variantId,
+      formCode: seed.formCode,
+      processState: seed.processState,
+      isSelectable: seed.isSelectable,
       defaultUnitId: seed.defaultUnitId,
       defaultAmountMode: seed.defaultAmountMode,
       defaultPurchaseQuantity: seed.defaultPurchaseQuantity,
-      parentIngredientId: null,
+      parentIngredientId: seed.conceptId === seed.id ? null : seed.conceptId,
       sourceId: seed.sourceIds[0] ?? null,
       status: seed.status,
       dataVersion: seed.dataVersion,
@@ -294,6 +345,16 @@ function toDataSourceRecord(source: CatalogSource): DataSourceRecord {
     version: source.version,
     sourceUrl: source.sourceUrl,
     license: source.license,
+    licenseCode: source.licenseCode,
+    licenseUrl: source.licenseUrl,
+    sourceType: source.sourceType,
+    sourceRevision: source.sourceRevision,
+    usageScopes: [...source.usageScopes],
+    rightsReviewStatus: source.rightsReviewStatus,
+    redistributionStatus: source.redistributionStatus,
+    attributionRequired: source.attributionRequired,
+    snapshotSha256: source.snapshotSha256,
+    importerVersion: source.importerVersion,
     importedAt: source.retrievedAt,
     metadata: {
       jurisdiction: source.jurisdiction,
@@ -303,6 +364,18 @@ function toDataSourceRecord(source: CatalogSource): DataSourceRecord {
       notes: source.notes,
     },
   };
+}
+
+function toImportBatchRecord(
+  batch: IngredientCatalogDocument["importBatches"][number],
+): ImportBatchRecord {
+  return { ...batch };
+}
+
+function toIngredientFormDefinition(
+  form: IngredientCatalogDocument["ingredientForms"][number],
+): IngredientFormDefinition {
+  return { ...form };
 }
 
 function toFoodCategory(category: IngredientCatalogDocument["categories"][number]): FoodCategory {
@@ -372,6 +445,8 @@ function toIngredientStorageProfile(profile: CatalogStorageProfile): IngredientS
     regionCode: profile.region,
     environmentTags: [...profile.environmentTags],
     foodState: profile.foodState,
+    formCode: profile.formCode,
+    processState: profile.processState,
     packagingState: profile.packagingState,
     endpoint: profile.endpoint,
     instructions: profile.instructions,
@@ -419,6 +494,8 @@ function toNutritionProfile(
       ? "not_measured"
       : profile.dataClassification,
     foodState: profile.foodState ?? "unspecified",
+    formCode: profile.formCode,
+    processState: profile.processState,
     sourceRecordId: profile.sourceRecordId ?? mapping?.externalId ?? null,
     sourceRelease: profile.sourceRelease,
     externalMappingId: profile.externalMappingId,
@@ -481,13 +558,19 @@ function toExternalIngredientMapping(mapping: CatalogExternalMapping): ExternalI
     provider: mapping.system,
     externalKey: mapping.externalId,
     externalLabel: mapping.externalName,
+    externalVersion: mapping.externalVersion,
     matchType: mapping.matchType,
-    confidence: mapping.matchType === "exact" ? 1 : mapping.matchType === "narrower" ? 0.8 : 0.65,
+    mappingLevel: mapping.mappingLevel,
+    usageScopes: [...mapping.usageScopes],
+    lossiness: [...mapping.lossiness],
+    confidence: mapping.confidence,
     sourceId: mapping.sourceId,
+    importBatchId: mapping.importBatchId,
     reviewStatus: mapping.reviewStatus,
     reviewedBy: mapping.reviewedBy,
     reviewedAt: mapping.reviewedAt,
     metadata: {
+      ...mapping.metadata,
       catalogMatchType: mapping.matchType,
     },
   };
@@ -538,6 +621,7 @@ async function migrateOperationalIngredientReferences(
   transaction: IDBPTransaction<MiiixIndexedDbSchema, typeof CATALOG_SEED_STORES, "readwrite">,
   legacyIds: Map<string, string>,
   references: LegacyCatalogReferenceMaps,
+  ingredientById: Map<string, SeedIngredientDetail>,
 ) {
   let migrated = 0;
 
@@ -547,13 +631,28 @@ async function migrateOperationalIngredientReferences(
     const unitId = migrateId(record.unitId, references.unitIds);
     const storageMethodId = migrateNullableId(record.storageMethodId, references.storageMethodIds);
     const storageLocation = record.storageLocation === "seasoning" ? "dryDark" : record.storageLocation;
+    const spec = operationalIngredientSpec(ingredientId, ingredientById, record);
+    const originType = record.originType ?? "purchased";
+    const derivedFromLotId = record.derivedFromLotId ?? null;
     const changes = Number(ingredientId !== record.ingredientId)
       + Number(unitId !== record.unitId)
       + Number(storageMethodId !== record.storageMethodId)
-      + Number(storageLocation !== record.storageLocation);
+      + Number(storageLocation !== record.storageLocation)
+      + countIngredientSpecChanges(record, spec)
+      + Number(record.originType !== originType)
+      + Number(record.derivedFromLotId !== derivedFromLotId);
     if (changes > 0) {
       migrated += changes;
-      await lotStore.put({ ...record, ingredientId, unitId, storageMethodId, storageLocation });
+      await lotStore.put({
+        ...record,
+        ingredientId,
+        ...spec,
+        originType,
+        derivedFromLotId,
+        unitId,
+        storageMethodId,
+        storageLocation,
+      });
     }
   }
 
@@ -576,10 +675,31 @@ async function migrateOperationalIngredientReferences(
   for (const record of await recipeIngredientStore.getAll()) {
     const ingredientId = migrateId(record.ingredientId, legacyIds);
     const unitId = migrateNullableId(record.unitId, references.unitIds);
-    const changes = Number(ingredientId !== record.ingredientId) + Number(unitId !== record.unitId);
+    const spec = operationalIngredientSpec(ingredientId, ingredientById, {
+      conceptId: record.conceptId,
+      variantId: record.variantId,
+      formCode: record.requiredFormCode,
+      processState: record.requiredProcessState,
+    });
+    const changes = Number(ingredientId !== record.ingredientId)
+      + Number(unitId !== record.unitId)
+      + countIngredientSpecChanges({
+        conceptId: record.conceptId,
+        variantId: record.variantId,
+        formCode: record.requiredFormCode,
+        processState: record.requiredProcessState,
+      }, spec);
     if (changes > 0) {
       migrated += changes;
-      await recipeIngredientStore.put({ ...record, ingredientId, unitId });
+      await recipeIngredientStore.put({
+        ...record,
+        ingredientId,
+        conceptId: spec.conceptId,
+        variantId: spec.variantId,
+        requiredFormCode: spec.formCode,
+        requiredProcessState: spec.processState,
+        unitId,
+      });
     }
   }
 
@@ -587,10 +707,31 @@ async function migrateOperationalIngredientReferences(
   for (const record of await shoppingItemStore.getAll()) {
     const ingredientId = migrateId(record.ingredientId, legacyIds);
     const unitId = migrateId(record.unitId, references.unitIds);
-    const changes = Number(ingredientId !== record.ingredientId) + Number(unitId !== record.unitId);
+    const spec = operationalIngredientSpec(ingredientId, ingredientById, {
+      conceptId: record.conceptId,
+      variantId: record.variantId,
+      formCode: record.requestedFormCode,
+      processState: record.requestedProcessState,
+    });
+    const changes = Number(ingredientId !== record.ingredientId)
+      + Number(unitId !== record.unitId)
+      + countIngredientSpecChanges({
+        conceptId: record.conceptId,
+        variantId: record.variantId,
+        formCode: record.requestedFormCode,
+        processState: record.requestedProcessState,
+      }, spec);
     if (changes > 0) {
       migrated += changes;
-      await shoppingItemStore.put({ ...record, ingredientId, unitId });
+      await shoppingItemStore.put({
+        ...record,
+        ingredientId,
+        conceptId: spec.conceptId,
+        variantId: spec.variantId,
+        requestedFormCode: spec.formCode,
+        requestedProcessState: spec.processState,
+        unitId,
+      });
     }
   }
 
@@ -598,11 +739,29 @@ async function migrateOperationalIngredientReferences(
   for (const record of await recognitionStore.getAll()) {
     const ingredientId = migrateNullableId(record.ingredientId, legacyIds);
     const correctedIngredientId = migrateNullableId(record.correctedIngredientId, legacyIds);
+    const selectedIngredientId = correctedIngredientId ?? ingredientId;
+    const spec = selectedIngredientId
+      ? operationalIngredientSpec(selectedIngredientId, ingredientById, record)
+      : {
+          conceptId: record.conceptId ?? null,
+          variantId: record.variantId ?? null,
+          formCode: record.formCode ?? "unspecified",
+          processState: record.processState ?? "unspecified",
+        } as const;
     const changes = Number(ingredientId !== record.ingredientId)
-      + Number(correctedIngredientId !== record.correctedIngredientId);
+      + Number(correctedIngredientId !== record.correctedIngredientId)
+      + countIngredientSpecChanges(record, spec);
     if (changes > 0) {
       migrated += changes;
-      await recognitionStore.put({ ...record, ingredientId, correctedIngredientId });
+      await recognitionStore.put({
+        ...record,
+        ingredientId,
+        correctedIngredientId,
+        conceptId: spec.conceptId,
+        variantId: spec.variantId,
+        formCode: spec.formCode,
+        processState: spec.processState,
+      });
     }
   }
 
@@ -629,14 +788,62 @@ async function migrateOperationalIngredientReferences(
   return migrated;
 }
 
+type PartialOperationalSpec = Partial<{
+  conceptId: string | null;
+  variantId: string | null;
+  formCode: SeedIngredientDetail["formCode"];
+  processState: SeedIngredientDetail["processState"];
+}>;
+
+function operationalIngredientSpec(
+  ingredientId: string,
+  ingredientById: Map<string, SeedIngredientDetail>,
+  existing: PartialOperationalSpec,
+) {
+  const ingredient = ingredientById.get(ingredientId);
+  return {
+    // Catalog refreshes fill only fields that predate the form model. A lot or
+    // recipe may intentionally carry a more specific physical form than its
+    // broad catalog record, so an existing value must never be overwritten.
+    conceptId: existing.conceptId ?? ingredient?.conceptId ?? ingredientId,
+    variantId: existing.variantId !== undefined
+      ? existing.variantId
+      : ingredient?.variantId ?? null,
+    formCode: existing.formCode ?? ingredient?.formCode ?? "unspecified",
+    processState: existing.processState ?? ingredient?.processState ?? "unspecified",
+  } as const;
+}
+
+function countIngredientSpecChanges(
+  current: PartialOperationalSpec,
+  next: {
+    conceptId: string | null;
+    variantId: string | null;
+    formCode: SeedIngredientDetail["formCode"];
+    processState: SeedIngredientDetail["processState"];
+  },
+) {
+  return Number(current.conceptId !== next.conceptId)
+    + Number(current.variantId !== next.variantId)
+    + Number(current.formCode !== next.formCode)
+    + Number(current.processState !== next.processState);
+}
+
+const LEGACY_REFERENCE_TREE_KEYS = new Set([
+  "ingredientId",
+  "ingredientIds",
+  "substitutionIngredientId",
+  "substitutionIngredientIds",
+]);
+
 function migrateIngredientReferenceTree(value: unknown, legacyIds: Map<string, string>, key = ""):
   { value: unknown; count: number } {
-  if (typeof value === "string" && /ingredientid$/i.test(key)) {
+  if (typeof value === "string" && LEGACY_REFERENCE_TREE_KEYS.has(key)) {
     const migrated = migrateId(value, legacyIds);
     return { value: migrated, count: Number(migrated !== value) };
   }
   if (Array.isArray(value)) {
-    if (/ingredientids$/i.test(key)) {
+    if (LEGACY_REFERENCE_TREE_KEYS.has(key)) {
       let count = 0;
       const values = value.map((item) => {
         if (typeof item !== "string") return item;
@@ -688,6 +895,8 @@ function validateSeedBoundary(document: IngredientCatalogDocument) {
   if (!document.catalogVersion.trim()) throw new Error("Catalog version is required");
   if (document.ingredients.length === 0) throw new Error("Catalog must contain ingredients");
   assertUniqueIds("source", document.sources.map((item) => item.id));
+  assertUniqueIds("import batch", document.importBatches.map((item) => item.id));
+  assertUniqueCodes("ingredient form", document.ingredientForms.map((item) => item.code));
   assertUniqueIds("category", document.categories.map((item) => item.id));
   assertUniqueIds("unit", document.units.map((item) => item.id));
   assertUniqueIds("storage method", document.storageMethods.map((item) => item.id));
@@ -712,6 +921,15 @@ function assertUniqueIds(label: string, ids: string[]) {
     if (!id) throw new Error(`Catalog ${label} ID is required`);
     if (seen.has(id)) throw new Error(`Duplicate catalog ${label} ID: ${id}`);
     seen.add(id);
+  }
+}
+
+function assertUniqueCodes(label: string, codes: string[]) {
+  const seen = new Set<string>();
+  for (const code of codes) {
+    if (!code) throw new Error(`Catalog ${label} code is required`);
+    if (seen.has(code)) throw new Error(`Duplicate catalog ${label} code: ${code}`);
+    seen.add(code);
   }
 }
 

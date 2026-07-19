@@ -8,6 +8,10 @@ import {
 
 const inventoryFixture = (shelfLifeDays: number | null, addedDaysAgo: number): InventoryItem => ({
   id: "ingredient-test",
+  conceptId: "ingredient-test",
+  variantId: null,
+  formCode: "unspecified",
+  processState: "raw",
   name: "测试食材",
   level1: "测试",
   level2: "测试",

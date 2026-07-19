@@ -15,7 +15,11 @@ import {
 } from "../domain/diary";
 import type { InventoryLot, JsonValue, MealPlanRecord, RecipeDocument } from "../domain/persistence";
 import type { AmountMode, FoodInfo, InventoryItem, StorageZone, UploadMethod } from "../domain/inventory";
-import { createMealPlan, type MealPlan, type ShoppingLine } from "../domain/plan";
+import {
+  createMealPlan,
+  type MealPlan,
+  type ShoppingLine,
+} from "../domain/plan";
 import type { Recipe } from "../domain/recipe";
 import {
   loadCatalogFoodProjection,
@@ -204,6 +208,10 @@ export async function saveTodayPlan(
       if (!food) return [];
       return [{
         ingredientId: food.id,
+        conceptId: line.conceptId ?? food.conceptId,
+        variantId: line.variantId !== undefined ? line.variantId : food.variantId,
+        requestedFormCode: line.formCode ?? food.formCode,
+        requestedProcessState: line.processState ?? food.processState,
         requiredQuantity: food.defaultMode === "mass" || food.defaultMode === "volume"
           ? Math.min(food.defaultAmount, 200)
           : 1,
@@ -330,7 +338,7 @@ async function seedLocalDemoData(provider: RepositoryProvider) {
     });
     await repositories.cooking.completeSession(LOCAL_USER_ID, seededSession.id, {
       completedAt: new Date(Date.now() - 86_400_000).toISOString(),
-      note: "下次可以加一点肉沫，口感更完整。",
+      note: "下次可以加一点猪肉末，口感更完整。",
       metadata: {
         source: "做过的菜",
         recipeTitle: "青椒炒蛋",
@@ -416,6 +424,10 @@ async function restoreShoppingList(
   return bundle.items.map((item) => ({
     id: item.id,
     ingredientId: item.ingredientId,
+    conceptId: item.conceptId,
+    variantId: item.variantId,
+    formCode: item.requestedFormCode,
+    processState: item.requestedProcessState,
     name: foodById.get(item.ingredientId)?.name ?? item.ingredientId,
     reason: item.reason ?? bundle.list.title,
     owned: item.ownedQuantity >= item.requiredQuantity,
@@ -434,6 +446,12 @@ function inventoryItemToLotInput(
   return {
     userId: LOCAL_USER_ID,
     ingredientId: item.id,
+    conceptId: item.conceptId,
+    variantId: item.variantId,
+    formCode: item.formCode,
+    processState: item.processState,
+    originType: "purchased",
+    derivedFromLotId: null,
     quantityInitial: item.amount,
     unitId: item.unitIdsByMode[item.amountMode] ?? item.defaultUnitId,
     storageMethodId: references.storageMethodIds[item.storage],
@@ -465,6 +483,10 @@ function lotToInventoryItem(
     : null;
   return [{
     ...food,
+    conceptId: lot.conceptId,
+    variantId: lot.variantId,
+    formCode: lot.formCode,
+    processState: lot.processState,
     storage: lot.storageMethodId
       ? references.storageZoneById[lot.storageMethodId] ?? food.storage
       : food.storage,
@@ -510,6 +532,10 @@ function recipeToSaveInput(
     metadata: {
       ingredientSnapshot: recipe.ingredients.map((ingredient) => ({
         ingredientId: ingredient.ingredientId,
+        conceptId: ingredient.conceptId ?? null,
+        variantId: ingredient.variantId ?? null,
+        formCode: ingredient.formCode ?? "unspecified",
+        processState: ingredient.processState ?? "unspecified",
         name: ingredient.name,
         role: ingredient.role,
       })),
@@ -523,6 +549,10 @@ function recipeToSaveInput(
       const inventoryItem = inventory.find((item) => item.id === food.id);
       return [{
         ingredientId: food.id,
+        conceptId: ingredient.conceptId ?? food.conceptId,
+        variantId: ingredient.variantId !== undefined ? ingredient.variantId : food.variantId,
+        requiredFormCode: ingredient.formCode ?? food.formCode,
+        requiredProcessState: ingredient.processState ?? food.processState,
         role: ingredient.role,
         quantity: inventoryItem ? consumptionQuantityForItem(inventoryItem) : null,
         unitId: inventoryItem?.unitIdsByMode[inventoryItem.amountMode] ?? food.defaultUnitId,
@@ -557,6 +587,10 @@ function recipeBundleToRecipe(bundle: RecipeBundle, foodById: Map<string, FoodIn
       const snapshot = ingredientById.get(line.ingredientId);
       return {
         ingredientId: line.ingredientId,
+        conceptId: line.conceptId,
+        variantId: line.variantId,
+        formCode: line.requiredFormCode,
+        processState: line.requiredProcessState,
         name: snapshot?.name ?? foodById.get(line.ingredientId)?.name ?? line.ingredientId,
         role: line.role,
       };
@@ -571,17 +605,27 @@ function selectLotsForCooking(lots: InventoryLot[], plan: MealPlan) {
   const selected = new Set(plan.selectedInventoryIds);
   if (selected.size) return lots.filter((lot) => selected.has(lot.id));
 
-  const requiredIngredientIds = new Set(
-    plan.recipe.ingredients
-      .filter((ingredient) => ingredient.role === "main")
-      .map((ingredient) => ingredient.ingredientId),
-  );
-  const chosenIngredients = new Set<string>();
+  const requiredIngredients = plan.recipe.ingredients.filter((ingredient) => ingredient.role === "main");
+  const chosenRequirements = new Set<number>();
   return lots.filter((lot) => {
-    if (!requiredIngredientIds.has(lot.ingredientId) || chosenIngredients.has(lot.ingredientId)) return false;
-    chosenIngredients.add(lot.ingredientId);
+    const requirementIndex = requiredIngredients.findIndex((ingredient, index) => (
+      !chosenRequirements.has(index) && lotSatisfiesIngredient(lot, ingredient)
+    ));
+    if (requirementIndex < 0) return false;
+    chosenRequirements.add(requirementIndex);
     return true;
   });
+}
+
+function lotSatisfiesIngredient(lot: InventoryLot, requirement: Recipe["ingredients"][number]) {
+  if (!requirement.conceptId) return lot.ingredientId === requirement.ingredientId;
+  if (lot.conceptId !== requirement.conceptId) return false;
+  if (requirement.variantId && lot.variantId !== requirement.variantId) return false;
+  if (requirement.formCode && requirement.formCode !== "unspecified"
+    && lot.formCode !== requirement.formCode) return false;
+  if (requirement.processState && requirement.processState !== "unspecified"
+    && lot.processState !== requirement.processState) return false;
+  return true;
 }
 
 function consumptionQuantity(lot: InventoryLot, condiment: boolean, references: CatalogReferences) {
@@ -618,7 +662,17 @@ function recordToDifficulty(recipe: RecipeDocument): Recipe["difficulty"] {
 }
 
 function shoppingLineToJson(line: ShoppingLine): Record<string, JsonValue> {
-  return { id: line.id, ingredientId: line.ingredientId, name: line.name, reason: line.reason, owned: line.owned };
+  return {
+    id: line.id,
+    ingredientId: line.ingredientId,
+    conceptId: line.conceptId ?? null,
+    variantId: line.variantId ?? null,
+    formCode: line.formCode ?? "unspecified",
+    processState: line.processState ?? "unspecified",
+    name: line.name,
+    reason: line.reason,
+    owned: line.owned,
+  };
 }
 
 function consumedItemToJson(item: ConsumedInventoryItem): Record<string, JsonValue> {
@@ -639,7 +693,17 @@ function parseShoppingLines(value: JsonValue | undefined): ShoppingLine[] {
     const name = asString(record.name);
     const reason = asString(record.reason);
     if (!id || !name || !reason || typeof record.owned !== "boolean") return [];
-    return [{ id, ingredientId: asString(record.ingredientId), name, reason, owned: record.owned }];
+    return [{
+      id,
+      ingredientId: asString(record.ingredientId),
+      conceptId: asString(record.conceptId),
+      variantId: asString(record.variantId),
+      formCode: asIngredientFormCode(record.formCode),
+      processState: asIngredientProcessState(record.processState),
+      name,
+      reason,
+      owned: record.owned,
+    }];
   });
 }
 
@@ -653,6 +717,10 @@ function parseRecipeIngredientSnapshot(value: JsonValue | undefined) {
     if (!ingredientId || !name || !role || !["main", "seasoning", "optional", "garnish"].includes(role)) return [];
     return [{
       ingredientId,
+      conceptId: asString(record.conceptId) ?? undefined,
+      variantId: record.variantId === null ? null : asString(record.variantId) ?? undefined,
+      formCode: asIngredientFormCode(record.formCode),
+      processState: asIngredientProcessState(record.processState),
       name,
       role: role as "main" | "seasoning" | "optional" | "garnish",
     }];
@@ -683,6 +751,19 @@ function asString(value: JsonValue | undefined) {
 
 function asStringArray(value: JsonValue | undefined) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function asIngredientFormCode(value: JsonValue | undefined) {
+  return typeof value === "string"
+    && ["unspecified", "whole_piece", "sliced", "diced", "shredded", "ground"].includes(value)
+    ? value as Recipe["ingredients"][number]["formCode"]
+    : undefined;
+}
+
+function asIngredientProcessState(value: JsonValue | undefined) {
+  return typeof value === "string" && ["unspecified", "raw", "cooked", "processed"].includes(value)
+    ? value as Recipe["ingredients"][number]["processState"]
+    : undefined;
 }
 
 async function resolveCatalogReferences(catalog: CatalogRepository): Promise<CatalogReferences> {

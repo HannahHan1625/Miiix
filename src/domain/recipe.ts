@@ -17,6 +17,10 @@ export type Recipe = {
 
 export type RecipeIngredient = {
   ingredientId: string;
+  conceptId?: string;
+  variantId?: string | null;
+  formCode?: IngredientFormCode;
+  processState?: IngredientProcessState;
   name: string;
   role: "main" | "seasoning" | "optional" | "garnish";
 };
@@ -64,3 +68,4 @@ export function recipeMainIngredients(recipe: Recipe) {
 export function recipeIngredientNames(recipe: Recipe) {
   return recipe.ingredients.map((item) => item.name);
 }
+import type { IngredientFormCode, IngredientProcessState } from "./persistence";

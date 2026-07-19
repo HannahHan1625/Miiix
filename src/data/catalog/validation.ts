@@ -1,4 +1,5 @@
-import rawCatalog from "./v0.4.2-golden-catalog.json";
+import rawV042Catalog from "./v0.4.2-golden-catalog.json";
+import rawV0421Catalog from "./v0.4.2.1-golden-catalog.json";
 import type {
   CatalogCategory,
   IngredientCatalogDocument,
@@ -6,7 +7,8 @@ import type {
 } from "./types";
 import { normalizeCatalogLabel } from "./normalize";
 
-export const v042GoldenCatalog = rawCatalog as unknown as IngredientCatalogDocument;
+export const v042GoldenCatalog = rawV042Catalog as unknown as IngredientCatalogDocument;
+export const v0421GoldenCatalog = rawV0421Catalog as unknown as IngredientCatalogDocument;
 
 export type CatalogValidationIssue = {
   code: string;
@@ -20,28 +22,37 @@ export type CatalogValidationResult = {
 };
 
 export type CatalogValidationOptions = {
-  releasePolicy?: "v0.4.2" | null;
+  releasePolicy?: "v0.4.2.1" | "v0.4.2" | null;
 };
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+const GENERAL_PORK_ID = "50000000-0000-4000-8000-000000000006";
+const GROUND_PORK_ID = "50000000-0000-4000-8000-000000000007";
 
 export function normalizeCatalogAlias(value: string): string {
   return normalizeCatalogLabel(value);
 }
 
-function isDateTime(value: string): boolean {
-  return value.length > 0 && Number.isFinite(Date.parse(value));
+function isDateTime(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && Number.isFinite(Date.parse(value));
 }
 
-function hasText(value: string): boolean {
-  return value.trim().length > 0;
+function hasText(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function aliasOwnershipKey(locale: string, normalizedAlias: string): string {
+  return `${locale.toLocaleLowerCase("en-US")}:${normalizedAlias}`;
 }
 
 export function validateIngredientCatalog(
   document: IngredientCatalogDocument,
   options: CatalogValidationOptions = {},
 ): CatalogValidationResult {
-  const releasePolicy = options.releasePolicy === undefined ? "v0.4.2" : options.releasePolicy;
+  const releasePolicy = options.releasePolicy === undefined ? "v0.4.2.1" : options.releasePolicy;
+  const enforceV0421 = releasePolicy === "v0.4.2.1"
+    || (releasePolicy === null && document.schemaVersion === "1.1.0");
   const issues: CatalogValidationIssue[] = [];
   const add = (code: string, path: string, message: string) => issues.push({ code, path, message });
   const expectUuid = (value: string, path: string) => {
@@ -56,8 +67,14 @@ export function validateIngredientCatalog(
     });
   };
 
+  if (releasePolicy === "v0.4.2.1" && document.catalogVersion !== "0.4.2.1") {
+    add("catalog_version", "catalogVersion", "The golden dataset must identify catalog version 0.4.2.1.");
+  }
   if (releasePolicy === "v0.4.2" && document.catalogVersion !== "0.4.2") {
     add("catalog_version", "catalogVersion", "The golden dataset must identify catalog version 0.4.2.");
+  }
+  if (enforceV0421 && document.schemaVersion !== "1.1.0") {
+    add("schema_version", "schemaVersion", "Catalog v0.4.2.1 requires schema version 1.1.0.");
   }
   if (!hasText(document.schemaVersion) || !hasText(document.dataVersion)) {
     add("catalog_governance", "schemaVersion", "Schema and data versions are required.");
@@ -66,13 +83,17 @@ export function validateIngredientCatalog(
     add("catalog_governance", "reviewedBy", "Top-level reviewer and valid review/publication timestamps are required.");
   }
 
+  const importBatches = document.importBatches ?? [];
+  const ingredientForms = document.ingredientForms ?? [];
+
   expectUniqueIds(document.sources, "sources");
+  if (enforceV0421) expectUniqueIds(importBatches, "importBatches");
   expectUniqueIds(document.units, "units");
   expectUniqueIds(document.storageMethods, "storageMethods");
   expectUniqueIds(document.categories, "categories");
   expectUniqueIds(document.ingredients, "ingredients");
 
-  if (releasePolicy === "v0.4.2") {
+  if (releasePolicy === "v0.4.2" || releasePolicy === "v0.4.2.1") {
     const requiredSourceSignals = ["WS/T 464", "家庭食品安全提示", "SR28", "FoodKeeper"];
     for (const signal of requiredSourceSignals) {
       const found = document.sources.some((source) =>
@@ -83,9 +104,13 @@ export function validateIngredientCatalog(
   }
 
   const sourceIds = new Set(document.sources.map((source) => source.id));
+  const sourceById = new Map(document.sources.map((source) => [source.id, source]));
+  const importBatchById = new Map(importBatches.map((batch) => [batch.id, batch]));
+  const formCodes = new Set(ingredientForms.map((form) => form.code));
   const unitById = new Map(document.units.map((unit) => [unit.id, unit]));
   const storageMethodIds = new Set(document.storageMethods.map((method) => method.id));
   const categoryById = new Map(document.categories.map((category) => [category.id, category]));
+  const ingredientById = new Map(document.ingredients.map((ingredient) => [ingredient.id, ingredient]));
 
   document.sources.forEach((source, index) => {
     if (!hasText(source.provider) || !hasText(source.datasetName) || !hasText(source.version)) {
@@ -97,12 +122,29 @@ export function validateIngredientCatalog(
     if (!isDateTime(source.retrievedAt) || !isDateTime(source.reviewedAt)) {
       add("source_governance", `sources[${index}]`, "Retrieval and review timestamps must be valid.");
     }
+    if (enforceV0421) {
+      if (!hasText(source.licenseCode) || !hasText(source.sourceRevision) || source.usageScopes.length === 0) {
+        add("source_release_metadata", `sources[${index}]`, "License code, source revision, and at least one usage scope are required.");
+      }
+      if (source.redistributionStatus === "attribution_required"
+        && (!source.attributionRequired || source.licenseUrl === null)) {
+        add("source_license", `sources[${index}].licenseUrl`, "Sources redistributed under attribution terms need an attribution flag and license URL.");
+      }
+      if (source.snapshotSha256 !== null && !SHA256_PATTERN.test(source.snapshotSha256)) {
+        add("source_checksum", `sources[${index}].snapshotSha256`, "Source snapshot checksum must be a lowercase SHA-256 digest.");
+      }
+    }
   });
+
+  if (enforceV0421) {
+    validateImportBatches(importBatches, sourceById, add);
+    validateIngredientForms(ingredientForms, add);
+  }
 
   for (const category of document.categories) validateCategory(category, categoryById, add);
 
   const activeIngredients = document.ingredients.filter((ingredient) => ingredient.status === "active");
-  if (releasePolicy === "v0.4.2") {
+  if (releasePolicy === "v0.4.2" || releasePolicy === "v0.4.2.1") {
     if (document.ingredients.length !== 30) {
       add("golden_set_size", "ingredients", `Expected exactly 30 golden records, found ${document.ingredients.length}.`);
     }
@@ -117,6 +159,7 @@ export function validateIngredientCatalog(
   const legacyOwners = new Map<string, string>();
   const allNestedIds = new Set<string>([
     ...document.sources.map((record) => record.id),
+    ...(enforceV0421 ? importBatches.map((record) => record.id) : []),
     ...document.units.map((record) => record.id),
     ...document.storageMethods.map((record) => record.id),
     ...document.categories.map((record) => record.id),
@@ -125,7 +168,12 @@ export function validateIngredientCatalog(
 
   for (const ingredient of document.ingredients) {
     const normalizedName = normalizeCatalogAlias(ingredient.canonicalNameZh);
-    if (!approvedAliasOwners.has(normalizedName)) approvedAliasOwners.set(normalizedName, ingredient.id);
+    const nameKey = aliasOwnershipKey("zh-CN", normalizedName);
+    if (!approvedAliasOwners.has(nameKey)) approvedAliasOwners.set(nameKey, ingredient.id);
+    if (ingredient.canonicalNameEn) {
+      const englishKey = aliasOwnershipKey("en", normalizeCatalogAlias(ingredient.canonicalNameEn));
+      if (!approvedAliasOwners.has(englishKey)) approvedAliasOwners.set(englishKey, ingredient.id);
+    }
   }
 
   const claimEntityId = (id: string, path: string) => {
@@ -157,11 +205,23 @@ export function validateIngredientCatalog(
     }
 
     validateGovernance(ingredient, path, add);
+    if (enforceV0421) {
+      validateIdentity(ingredient, path, ingredientById, formCodes, add);
+    }
     validateCategories(ingredient, path, categoryById, add);
     validateAliases(ingredient, path, sourceIds, approvedAliasOwners, claimEntityId, add);
     validateUnits(ingredient, path, unitById, sourceIds, claimEntityId, add);
-    validateStorage(ingredient, path, sourceIds, storageMethodIds, claimEntityId, add);
-    validateNutrition(ingredient, path, sourceIds, unitById, claimEntityId, add);
+    validateStorage(ingredient, path, sourceIds, storageMethodIds, formCodes, enforceV0421, claimEntityId, add);
+    validateExternalMappings(
+      ingredient,
+      path,
+      sourceById,
+      importBatchById,
+      enforceV0421,
+      claimEntityId,
+      add,
+    );
+    validateNutrition(ingredient, path, sourceIds, unitById, formCodes, enforceV0421, claimEntityId, add);
     validateImages(ingredient, path, claimEntityId, add);
 
     for (const sourceId of ingredient.sourceIds) {
@@ -172,8 +232,183 @@ export function validateIngredientCatalog(
     }
   }
 
-  if (releasePolicy === "v0.4.2") validateLegacyAssignments(document.ingredients, add);
+  if (releasePolicy === "v0.4.2" || releasePolicy === "v0.4.2.1") {
+    validateLegacyAssignments(document.ingredients, add);
+  }
+  if (enforceV0421) validatePorkReleaseSemantics(document.ingredients, add);
   return { valid: issues.length === 0, issues };
+}
+
+function validateImportBatches(
+  batches: IngredientCatalogDocument["importBatches"],
+  sourceById: Map<string, IngredientCatalogDocument["sources"][number]>,
+  add: (code: string, path: string, message: string) => void,
+): void {
+  for (const [index, batch] of batches.entries()) {
+    const path = `importBatches[${index}]`;
+    const source = sourceById.get(batch.sourceId);
+    if (!source) {
+      add("missing_source", `${path}.sourceId`, `Unknown source ${batch.sourceId}.`);
+      continue;
+    }
+    if (batch.sourceRevision !== source.sourceRevision) {
+      add("import_batch_revision", `${path}.sourceRevision`, "Import batch revision must equal its source revision.");
+    }
+    const accounted = batch.acceptedMappingCount + batch.pendingMappingCount + batch.rejectedRecordCount;
+    if (accounted > batch.inputRecordCount) {
+      add("import_batch_counts", path, "Accepted, pending, and rejected counts cannot exceed inputRecordCount.");
+    }
+    if (batch.status === "published") {
+      if (accounted !== batch.inputRecordCount) {
+        add("published_batch_counts", path, "Published batch counts must account for every input record.");
+      }
+      if (!hasText(batch.sourceRevision)
+        || !hasText(batch.importerVersion)
+        || !SHA256_PATTERN.test(batch.recordsSha256)
+        || !hasText(batch.reviewedBy)
+        || !isDateTime(batch.importedAt)
+        || !isDateTime(batch.reviewedAt)) {
+        add("published_batch_governance", path, "Published batches require revision, importer, checksum, and review timestamps.");
+      }
+      if (!hasText(source.sourceRevision) || !hasText(source.importerVersion)) {
+        add("published_batch_source", `${path}.sourceId`, "Published batches require a versioned source importer contract.");
+      } else if (batch.importerVersion !== source.importerVersion) {
+        add("published_batch_importer", `${path}.importerVersion`, "Published batch importer must equal the source importer version.");
+      }
+      if (source.reviewStatus !== "approved") {
+        add("published_batch_source_review", `${path}.sourceId`, "Published batches require an approved data source.");
+      }
+    }
+  }
+}
+
+function validateIngredientForms(
+  forms: IngredientCatalogDocument["ingredientForms"],
+  add: (code: string, path: string, message: string) => void,
+): void {
+  const owners = new Map<string, number>();
+  forms.forEach((form, index) => {
+    const previous = owners.get(form.code);
+    if (previous !== undefined) {
+      add("duplicate_form_code", `ingredientForms[${index}].code`, `Form code ${form.code} is already defined at index ${previous}.`);
+    }
+    owners.set(form.code, index);
+    if (!hasText(form.nameZh) || !hasText(form.nameEn) || !hasText(form.description) || !hasText(form.dataVersion)) {
+      add("form_governance", `ingredientForms[${index}]`, "Ingredient forms require names, description, and data version.");
+    }
+  });
+  for (const code of ["unspecified", "whole_piece", "sliced", "diced", "shredded", "ground"] as const) {
+    const form = forms.find((candidate) => candidate.code === code);
+    if (!form || form.status !== "active") {
+      add("required_form", "ingredientForms", `Catalog v0.4.2.1 requires active form code ${code}.`);
+    }
+  }
+}
+
+function validateIdentity(
+  ingredient: IngredientDetail,
+  path: string,
+  ingredientById: Map<string, IngredientDetail>,
+  formCodes: Set<string>,
+  add: (code: string, path: string, message: string) => void,
+): void {
+  if (!formCodes.has(ingredient.formCode)) {
+    add("form_reference", `${path}.formCode`, `Unknown ingredient form ${ingredient.formCode}.`);
+  }
+  const concept = ingredientById.get(ingredient.conceptId);
+  if (!concept) {
+    add("concept_reference", `${path}.conceptId`, `Unknown concept ${ingredient.conceptId}.`);
+  }
+  const variant = ingredient.variantId === null ? null : ingredientById.get(ingredient.variantId);
+  if (ingredient.variantId !== null && !variant) {
+    add("variant_reference", `${path}.variantId`, `Unknown variant ${ingredient.variantId}.`);
+  }
+
+  if (ingredient.recordRole === "concept") {
+    if (ingredient.conceptId !== ingredient.id) {
+      add("concept_identity", `${path}.conceptId`, "Concept records must identify themselves as their concept.");
+    }
+    if (ingredient.variantId !== null) {
+      add("concept_identity", `${path}.variantId`, "Concept records cannot point to a variant.");
+    }
+    if (ingredient.formCode !== "unspecified") {
+      add("concept_identity", `${path}.formCode`, "Concept records use the unspecified form; concrete forms are separate projections.");
+    }
+  }
+
+  if (ingredient.recordRole === "variant") {
+    if (ingredient.conceptId === ingredient.id || concept?.recordRole !== "concept") {
+      add("variant_identity", `${path}.conceptId`, "Variant records must point to a different concept record.");
+    }
+    if (ingredient.variantId !== ingredient.id) {
+      add("variant_identity", `${path}.variantId`, "Variant records must identify themselves as their variant.");
+    }
+  }
+
+  if (ingredient.recordRole === "form_projection") {
+    if (ingredient.conceptId === ingredient.id) {
+      add("form_projection_identity", `${path}.conceptId`, "Form projections cannot identify themselves as their concept.");
+    }
+    if (concept && concept.recordRole !== "concept") {
+      add("form_projection_identity", `${path}.conceptId`, "Form projections must resolve to a concept record.");
+    }
+    if (ingredient.formCode === "unspecified") {
+      add("form_projection_identity", `${path}.formCode`, "Form projections require a concrete form code.");
+    }
+    if (variant && (variant.recordRole !== "variant" || variant.conceptId !== ingredient.conceptId)) {
+      add("form_projection_identity", `${path}.variantId`, "Form projection variant must belong to the same concept.");
+    }
+  }
+}
+
+function validatePorkReleaseSemantics(
+  ingredients: IngredientDetail[],
+  add: (code: string, path: string, message: string) => void,
+): void {
+  const generalPork = ingredients.find((ingredient) => ingredient.id === GENERAL_PORK_ID);
+  const groundPork = ingredients.find((ingredient) => ingredient.id === GROUND_PORK_ID);
+  if (!generalPork || generalPork.recordRole !== "concept" || generalPork.conceptId !== GENERAL_PORK_ID) {
+    add("pork_identity", "ingredients", "General pork must remain the self-identifying pork concept.");
+  }
+  if (!groundPork
+    || groundPork.recordRole !== "form_projection"
+    || groundPork.conceptId !== GENERAL_PORK_ID
+    || groundPork.variantId !== null
+    || groundPork.formCode !== "ground"
+    || groundPork.processState !== "raw") {
+    add("ground_pork_identity", "ingredients", "Ground pork must be the raw ground form projection of the general pork concept.");
+  }
+
+  const approvedAlias = (ingredient: IngredientDetail | undefined, label: string, locale: string) =>
+    ingredient?.aliases.some((alias) => alias.reviewStatus === "approved"
+      && alias.locale.toLocaleLowerCase("en-US") === locale.toLocaleLowerCase("en-US")
+      && normalizeCatalogAlias(alias.alias) === normalizeCatalogAlias(label)) ?? false;
+
+  if (!approvedAlias(generalPork, "pork", "en")) {
+    add("pork_alias", "ingredients", "The ordinary English label pork must resolve to the general pork concept.");
+  }
+  if (approvedAlias(groundPork, "pork", "en")) {
+    add("ground_pork_alias", "ingredients", "The ordinary English label pork cannot resolve to ground pork.");
+  }
+  for (const label of ["ground pork", "minced pork", "pork mince"]) {
+    if (!approvedAlias(groundPork, label, "en")) {
+      add("ground_pork_alias", "ingredients", `Ground pork requires approved English alias ${label}.`);
+    }
+  }
+  for (const label of ["猪肉糜", "猪绞肉"]) {
+    const found = groundPork?.aliases.some((alias) => alias.reviewStatus === "approved"
+      && normalizeCatalogAlias(alias.alias) === normalizeCatalogAlias(label));
+    if (!found) add("ground_pork_alias", "ingredients", `Ground pork requires approved alias ${label}.`);
+  }
+
+  const ambiguous = new Set(["肉末", "肉糜", "肉沫"].map(normalizeCatalogAlias));
+  for (const ingredient of ingredients) {
+    for (const alias of ingredient.aliases) {
+      if (alias.reviewStatus === "approved" && ambiguous.has(normalizeCatalogAlias(alias.alias))) {
+        add("ambiguous_meat_alias", `ingredients.${ingredient.id}.aliases`, `${alias.alias} lacks an animal source and cannot be auto-approved.`);
+      }
+    }
+  }
 }
 
 function validateCategory(
@@ -255,11 +490,12 @@ function validateAliases(
       add("alias_region", `${aliasPath}.region`, "Regional aliases require an explicit region.");
     }
     if (alias.reviewStatus === "approved") {
-      const owner = approvedAliasOwners.get(alias.normalizedAlias);
+      const aliasKey = aliasOwnershipKey(alias.locale, alias.normalizedAlias);
+      const owner = approvedAliasOwners.get(aliasKey);
       if (owner && owner !== ingredient.id) {
         add("approved_alias_conflict", `${aliasPath}.normalizedAlias`, `Approved alias is already owned by ${owner}.`);
       } else {
-        approvedAliasOwners.set(alias.normalizedAlias, ingredient.id);
+        approvedAliasOwners.set(aliasKey, ingredient.id);
       }
     }
   });
@@ -304,6 +540,8 @@ function validateStorage(
   path: string,
   sourceIds: Set<string>,
   storageMethodIds: Set<string>,
+  formCodes: Set<string>,
+  enforceV0421: boolean,
   claimEntityId: (id: string, path: string) => void,
   add: (code: string, path: string, message: string) => void,
 ): void {
@@ -317,6 +555,14 @@ function validateStorage(
     if (profile.ingredientId !== ingredient.id) add("storage_ingredient", `${profilePath}.ingredientId`, "Storage profile ingredientId does not match its owner.");
     if (!storageMethodIds.has(profile.storageMethodId)) add("storage_method", `${profilePath}.storageMethodId`, "Storage method must exist.");
     if (!sourceIds.has(profile.sourceId)) add("missing_source", `${profilePath}.sourceId`, "Storage source must exist.");
+    if (enforceV0421) {
+      if (!formCodes.has(profile.formCode)) {
+        add("form_reference", `${profilePath}.formCode`, `Unknown storage form ${profile.formCode}.`);
+      }
+      if (profile.formCode !== ingredient.formCode || profile.processState !== ingredient.processState) {
+        add("storage_identity_context", profilePath, "Storage form and process state must match the ingredient record.");
+      }
+    }
     if (!hasText(profile.region) || profile.environmentTags.length === 0 || !hasText(profile.foodState) || !hasText(profile.packagingState)) {
       add("storage_context", profilePath, "Region, environment, food state, and packaging state are required.");
     }
@@ -336,11 +582,93 @@ function validateStorage(
   });
 }
 
+function validateExternalMappings(
+  ingredient: IngredientDetail,
+  path: string,
+  sourceById: Map<string, IngredientCatalogDocument["sources"][number]>,
+  importBatchById: Map<string, IngredientCatalogDocument["importBatches"][number]>,
+  enforceV0421: boolean,
+  claimEntityId: (id: string, path: string) => void,
+  add: (code: string, path: string, message: string) => void,
+): void {
+  ingredient.externalMappings.forEach((mapping, mappingIndex) => {
+    const mappingPath = `${path}.externalMappings[${mappingIndex}]`;
+    claimEntityId(mapping.id, `${mappingPath}.id`);
+    if (mapping.ingredientId !== ingredient.id) {
+      add("mapping_ingredient", `${mappingPath}.ingredientId`, "External mapping ingredientId does not match its owner.");
+    }
+    const source = sourceById.get(mapping.sourceId);
+    if (!source) add("missing_source", `${mappingPath}.sourceId`, "External mapping source must exist.");
+    if (!hasText(mapping.externalId)
+      || !hasText(mapping.externalName)
+      || !hasText(mapping.reviewedBy)
+      || !isDateTime(mapping.reviewedAt)) {
+      add("mapping_governance", mappingPath, "External record and review governance are required.");
+    }
+    if (!enforceV0421) return;
+
+    const batch = mapping.importBatchId === null ? null : importBatchById.get(mapping.importBatchId);
+    if (mapping.importBatchId !== null && !batch) {
+      add("mapping_import_batch", `${mappingPath}.importBatchId`, "External mapping import batch must exist.");
+    }
+    if (batch && batch.sourceId !== mapping.sourceId) {
+      add("mapping_import_batch", `${mappingPath}.importBatchId`, "Mapping and import batch must use the same source.");
+    }
+    if (!hasText(mapping.externalVersion)) {
+      add("mapping_governance", mappingPath, "External mapping version is required.");
+    }
+    if (source) {
+      for (const scope of mapping.usageScopes) {
+        if (!source.usageScopes.includes(scope)) {
+          add("mapping_usage_scope", `${mappingPath}.usageScopes`, `Source does not permit ${scope} usage.`);
+        }
+      }
+      if (mapping.externalVersion !== source.sourceRevision) {
+        add("mapping_revision", `${mappingPath}.externalVersion`, "Mapping external version must equal the reviewed source revision.");
+      }
+    }
+    if (mapping.matchType === "exact" && mapping.lossiness.length > 0) {
+      add("mapping_lossiness", `${mappingPath}.lossiness`, "Exact mappings cannot declare lossy dimensions.");
+    }
+    if (mapping.matchType !== "exact" && mapping.lossiness.length === 0) {
+      add("mapping_lossiness", `${mappingPath}.lossiness`, "Every non-exact mapping must declare its lossy dimensions.");
+    }
+    if (mapping.matchType === "related" && Object.keys(mapping.metadata).length === 0) {
+      add("related_mapping_evidence", `${mappingPath}.metadata`, "Related mappings require structured relationship evidence.");
+    }
+
+    if (mapping.reviewStatus === "approved") {
+      if (!source || source.reviewStatus !== "approved") {
+        add("mapping_source_review", `${mappingPath}.sourceId`, "Approved mappings require an approved source record.");
+      }
+      if (mapping.system === "Epicure_Cooc") {
+        if (mapping.matchType !== "exact" || mapping.lossiness.length > 0) {
+          add("epicure_approval_gate", mappingPath, "Only exact, lossless Epicure mappings can be approved automatically.");
+        }
+        if (!batch || batch.status !== "published") {
+          add("epicure_published_batch", `${mappingPath}.importBatchId`, "Approved Epicure mappings require a published import batch.");
+        }
+        if (!source?.usageScopes.includes("recommendation") || !mapping.usageScopes.includes("recommendation")) {
+          add("epicure_usage_scope", `${mappingPath}.usageScopes`, "Approved Epicure mappings require recommendation usage on source and mapping.");
+        }
+        if (source?.rightsReviewStatus === "approved") {
+          add("epicure_rights_scope", `${mappingPath}.sourceId`, "Epicure corpus rights remain review-scoped and cannot be labelled production-cleared.");
+        }
+        if (mapping.mappingLevel !== "concept") {
+          add("epicure_mapping_level", `${mappingPath}.mappingLevel`, "Epicure mappings attach at concept level in v0.4.2.1.");
+        }
+      }
+    }
+  });
+}
+
 function validateNutrition(
   ingredient: IngredientDetail,
   path: string,
   sourceIds: Set<string>,
   unitById: Map<string, { id: string }>,
+  formCodes: Set<string>,
+  enforceV0421: boolean,
   claimEntityId: (id: string, path: string) => void,
   add: (code: string, path: string, message: string) => void,
 ): void {
@@ -359,15 +687,14 @@ function validateNutrition(
     add("nutrition_provenance", `${profilePath}.externalMappingId`, "Nutrition external mapping must belong to the ingredient.");
   }
 
-  ingredient.externalMappings.forEach((candidate, mappingIndex) => {
-    const mappingPath = `${path}.externalMappings[${mappingIndex}]`;
-    claimEntityId(candidate.id, `${mappingPath}.id`);
-    if (candidate.ingredientId !== ingredient.id) add("mapping_ingredient", `${mappingPath}.ingredientId`, "External mapping ingredientId does not match its owner.");
-    if (!sourceIds.has(candidate.sourceId)) add("missing_source", `${mappingPath}.sourceId`, "External mapping source must exist.");
-    if (!hasText(candidate.externalId) || !hasText(candidate.externalName) || !hasText(candidate.reviewedBy) || !isDateTime(candidate.reviewedAt)) {
-      add("mapping_governance", mappingPath, "External mapping record and review governance are required.");
+  if (enforceV0421) {
+    if (!formCodes.has(profile.formCode)) {
+      add("form_reference", `${profilePath}.formCode`, `Unknown nutrition form ${profile.formCode}.`);
     }
-  });
+    if (profile.formCode !== ingredient.formCode || profile.processState !== ingredient.processState) {
+      add("nutrition_identity_context", profilePath, "Nutrition form and process state must match the ingredient record.");
+    }
+  }
 
   if (profile.sourceId !== null && !sourceIds.has(profile.sourceId)) {
     add("missing_source", `${profilePath}.sourceId`, "Nutrition source must exist.");
@@ -379,6 +706,9 @@ function validateNutrition(
     if (numericValues.some((value) => value === null)) add("nutrition_completeness", profilePath, "Approved baseline nutrition requires all five values.");
     if (!profile.sourceId || !mapping || mapping.reviewStatus !== "approved" || mapping.matchType !== "exact") {
       add("nutrition_provenance", profilePath, "Approved nutrition requires an approved exact external mapping and source.");
+    }
+    if (enforceV0421 && mapping && !mapping.usageScopes.includes("nutrition")) {
+      add("nutrition_provenance", profilePath, "Approved nutrition mapping must allow nutrition usage.");
     }
     if (profile.matchType !== "exact" || profile.dataClassification === "unknown" || !profile.sourceRecordId || !profile.sourceRelease) {
       add("nutrition_classification", profilePath, "Approved nutrition requires exact match, classification, source record, and release.");

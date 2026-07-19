@@ -4,12 +4,15 @@ import {
   type DBSchema,
   type IDBPDatabase,
   type IDBPTransaction,
+  type StoreNames,
 } from "idb";
 import type {
   CanonicalIngredient,
   CookingSessionRecord,
   DataSourceRecord,
   FoodCategory,
+  ImportBatchRecord,
+  IngredientFormDefinition,
   InventoryLot,
   InventoryTransaction,
   JsonValue,
@@ -29,7 +32,7 @@ import type {
 import type { IngredientDetail } from "../contracts";
 
 export const MIIIX_DATABASE_NAME = "miiix-local";
-export const MIIIX_DATABASE_VERSION = 2;
+export const MIIIX_DATABASE_VERSION = 3;
 
 export type MetaRecord = {
   key: string;
@@ -72,6 +75,12 @@ export type CatalogIngredientRecord = {
   categoryIds: string[];
   storageMethodIds: string[];
   kind: CanonicalIngredient["kind"];
+  recordRole: CanonicalIngredient["recordRole"];
+  conceptId: string;
+  variantId: string | null;
+  formCode: CanonicalIngredient["formCode"];
+  processState: CanonicalIngredient["processState"];
+  isSelectable: boolean;
   status: CanonicalIngredient["status"];
   detail: IngredientDetail;
 };
@@ -88,6 +97,7 @@ export interface MiiixIndexedDbSchema extends DBSchema {
       "by-user": string;
       "by-user-status": [string, InventoryLot["status"]];
       "by-user-ingredient": [string, string];
+      "by-user-concept-form": [string, string, InventoryLot["formCode"]];
     };
   };
   inventoryTransactions: {
@@ -208,6 +218,22 @@ export interface MiiixIndexedDbSchema extends DBSchema {
       "by-provider": string;
     };
   };
+  catalogImportBatches: {
+    key: string;
+    value: ImportBatchRecord;
+    indexes: {
+      "by-source": string;
+      "by-source-revision": [string, string];
+      "by-status": ImportBatchRecord["status"];
+    };
+  };
+  catalogIngredientForms: {
+    key: IngredientFormDefinition["code"];
+    value: IngredientFormDefinition;
+    indexes: {
+      "by-status": IngredientFormDefinition["status"];
+    };
+  };
   catalogCategories: {
     key: string;
     value: FoodCategory;
@@ -241,6 +267,9 @@ export interface MiiixIndexedDbSchema extends DBSchema {
       "by-category": string;
       "by-storage-method": string;
       "by-kind": CanonicalIngredient["kind"];
+      "by-record-role": CanonicalIngredient["recordRole"];
+      "by-concept": string;
+      "by-form": CanonicalIngredient["formCode"];
       "by-status": CanonicalIngredient["status"];
       "by-kind-status": [CanonicalIngredient["kind"], CanonicalIngredient["status"]];
     };
@@ -267,6 +296,8 @@ export const allStoreNames = [
   "recommendationCandidates",
   "recommendationFeedback",
   "catalogSources",
+  "catalogImportBatches",
+  "catalogIngredientForms",
   "catalogCategories",
   "catalogUnits",
   "catalogStorageMethods",
@@ -281,9 +312,10 @@ export type MiiixReadWriteTransaction = IDBPTransaction<
 
 export function openMiiixDatabase(name = MIIIX_DATABASE_NAME) {
   return openDB<MiiixIndexedDbSchema>(name, MIIIX_DATABASE_VERSION, {
-    upgrade(database, oldVersion) {
+    upgrade(database, oldVersion, _newVersion, transaction) {
       if (oldVersion < 1) createOperationalStores(database);
       if (oldVersion < 2) createCatalogStores(database);
+      if (oldVersion < 3) createIdentityLayerStoresAndIndexes(database, transaction);
     },
   });
 }
@@ -372,6 +404,39 @@ function createCatalogStores(database: MiiixDatabase) {
   ingredients.createIndex("by-kind", "kind");
   ingredients.createIndex("by-status", "status");
   ingredients.createIndex("by-kind-status", ["kind", "status"]);
+}
+
+function createIdentityLayerStoresAndIndexes(
+  database: MiiixDatabase,
+  transaction: IDBPTransaction<
+    MiiixIndexedDbSchema,
+    ArrayLike<StoreNames<MiiixIndexedDbSchema>>,
+    "versionchange"
+  >,
+) {
+  const batches = database.createObjectStore("catalogImportBatches", { keyPath: "id" });
+  batches.createIndex("by-source", "sourceId");
+  batches.createIndex("by-source-revision", ["sourceId", "sourceRevision"], { unique: true });
+  batches.createIndex("by-status", "status");
+
+  const forms = database.createObjectStore("catalogIngredientForms", { keyPath: "code" });
+  forms.createIndex("by-status", "status");
+
+  const lots = transaction.objectStore("inventoryLots");
+  if (!lots.indexNames.contains("by-user-concept-form")) {
+    lots.createIndex("by-user-concept-form", ["userId", "conceptId", "formCode"]);
+  }
+
+  const ingredients = transaction.objectStore("catalogIngredients");
+  if (!ingredients.indexNames.contains("by-record-role")) {
+    ingredients.createIndex("by-record-role", "recordRole");
+  }
+  if (!ingredients.indexNames.contains("by-concept")) {
+    ingredients.createIndex("by-concept", "conceptId");
+  }
+  if (!ingredients.indexNames.contains("by-form")) {
+    ingredients.createIndex("by-form", "formCode");
+  }
 }
 
 export function deleteMiiixDatabase(name = MIIIX_DATABASE_NAME) {

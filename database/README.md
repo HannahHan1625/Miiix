@@ -16,8 +16,9 @@ This directory is the source of truth for the target Supabase PostgreSQL schema.
 4. `0004_row_level_security.sql`: public catalog read rules and owner-only access to private user data.
 5. `0005_repository_adapter_support.sql`: portable recipe/plan metadata and cooking-session idempotency required by local and cloud adapters.
 6. `0006_catalog_data_quality.sql`: catalog governance, typed aliases, amount dimensions, supported units, contextual storage ranges, nutrition provenance, image rights, external-mapping evidence, and release guardrails.
+7. `0007_ingredient_identity_layers.sql`: source import batches, controlled ingredient forms, concept/variant/form identity, form-aware storage/nutrition/recipe/inventory records, lineage fields, constraints, indexes, and RLS.
 
-Do not edit an applied migration. Add `0007_description.sql` for the next change.
+Do not edit an applied migration. Add `0008_description.sql` for the next change.
 
 Inventory balance changes use `apply_inventory_transaction(...)`. It locks the lot, prevents negative balances, writes the ledger and balance atomically, and requires an idempotency key so a retried completion cannot deduct twice.
 
@@ -25,16 +26,19 @@ Inventory balance changes use `apply_inventory_transaction(...)`. It locks the l
 
 ```mermaid
 flowchart LR
-    A[Canonical ingredient] --> B[Storage and nutrition profiles]
-    A --> C[User inventory lot]
-    C --> D[Inventory transaction ledger]
-    A --> E[Structured recipe ingredient]
-    F[External model mapping] --> A
-    C --> G[Recommendation run]
-    E --> G
-    G --> H[Meal plan]
-    H --> I[Cooking session]
-    I --> D
+    A[Ingredient concept] --> B[Variant or form projection]
+    B --> C[Storage and nutrition profiles]
+    B --> D[User inventory lot]
+    D --> E[Inventory transaction ledger]
+    B --> F[Structured recipe ingredient]
+    G[Versioned external mapping] --> A
+    H[Source manifest] --> I[Import batch]
+    I --> G
+    D --> J[Recommendation run]
+    F --> J
+    J --> K[Meal plan]
+    K --> L[Cooking session]
+    L --> E
 ```
 
 ## Deployment Target
@@ -46,9 +50,9 @@ The SQL targets Supabase PostgreSQL and assumes:
 - The `vector` extension is available for Epicure or future embedding models.
 - AI provider secrets remain in an Edge Function or backend service, never in the GitHub Pages frontend.
 
-The schema is defined but has not yet been deployed to a live Supabase project. v0.4.2 uses the IndexedDB adapter in `src/data/repositories/indexeddb/` to exercise the same Repository contracts locally. Credentials and a production project are intentionally outside this version.
+The schema is defined but has not yet been deployed to a live Supabase project. v0.4.2.1 uses the IndexedDB adapter in `src/data/repositories/indexeddb/` to exercise the same Repository contracts locally. Credentials and a production project are intentionally outside this version.
 
-`0006` is append-only and does not seed user inventory. Before a cloud release it still needs rehearsal against both an empty database and a copy containing v0.4.1 data. A successful app rollback should leave the additive catalog columns and tables in place; destructive down migrations are not the default recovery strategy.
+`0006` and `0007` are append-only and do not seed user inventory. Before a cloud release they still need rehearsal against both an empty database and copies containing v0.4.1/v0.4.2 data. A successful app rollback should leave additive catalog columns and tables in place; destructive down migrations are not the default recovery strategy.
 
 ## Validation
 

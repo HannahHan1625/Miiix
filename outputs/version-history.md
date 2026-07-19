@@ -325,3 +325,27 @@ Product judgment:
 - Thirty records are a governed engineering golden set, not a claim about China's national consumption ranking.
 - Stable identity and evidence boundaries now exist before OCR/VLM work: models may propose candidates later, but cannot silently turn a similar string into approved master data.
 - Expanding to 200 records is blocked until real-entry alias/error samples, an accountable review cadence, PostgreSQL migration rehearsal, and production-image governance are demonstrated.
+
+## v0.4.2.1 — 数据源接入与形态模型
+
+Date: 2026-07-19
+
+Scope:
+
+- Added a pinned, offline and reproducible Epicure vocabulary mapping input at revision `03edd31`, with source rights, usage scopes, importer version, import batch, mapping lossiness and SHA-256 evidence.
+- Kept Epicure model/vocabulary rights separate from the heterogeneous underlying recipe corpus; no recipe text, co-occurrence edge list, runtime network call or recommendation claim was imported.
+- Added `concept / variant / form_projection` identity roles plus controlled physical forms and process states across Catalog, IndexedDB and PostgreSQL.
+- Modelled “猪肉末” as the `ground` projection of broad “猪肉”, while preserving both existing UUIDs and every v0.4.1 historical reference.
+- Isolated `miiix-v0.4.1:pork -> 猪肉末` in a compatibility-only resolver. New `pork` resolves to broad pork; `ground/minced pork` resolves to ground pork; animal-ambiguous `肉末/肉糜/肉沫` remains pending.
+- Upgraded IndexedDB to v3, persisted sources/import batches/form definitions, added concept/form indexes, and transactionally backfilled form specs on inventory, recipe, shopping and recognition records.
+- Restricted legacy tree migration to known Miiix reference fields, preserved explicit operational forms during catalog refresh, and atomically recomputed recognition specs after user correction.
+- Carried concept/form/process through recipe and shopping projections; availability now uses concept identity with explicit form/process constraints instead of ID-only matching.
+- Limited operational external-mapping reads to approved evidence and explicit concept-to-form inheritance policies.
+- Allowed pork mince bought in that form to be stored as a purchased lot. Explicitly rejected `user_transformed` lot creation until source consumption and derived-lot creation can be implemented atomically.
+- Added append-only migration `0007_ingredient_identity_layers.sql`; historical migrations remain unchanged.
+- Added deterministic build, schema/semantic, v1/v2 upgrade, catalog query, inherited external mapping, purchased-form and vertical-flow regression coverage.
+
+Product judgment:
+
+- This version establishes a trustworthy identity and import boundary; it does not complete the recipe/co-occurrence database or prove that generated recipes are surprising and reasonable.
+- The next pairing-data version must define source rights, relation semantics, offline evaluation and fallback behavior before any model is connected to the product.

@@ -80,6 +80,13 @@ describe("persistent kitchen workflow", () => {
     const restoredBeforeCooking = await loadKitchenState(provider);
     expect(restoredBeforeCooking.todayPlan?.id).toBe(planned.plan.id);
     expect(restoredBeforeCooking.todayPlan?.recipe.calories).toBeNull();
+    expect(restoredBeforeCooking.todayPlan?.recipe.ingredients[0]).toMatchObject({
+      ingredientId: egg.id,
+      conceptId: egg.conceptId,
+      variantId: egg.variantId,
+      formCode: egg.formCode,
+      processState: egg.processState,
+    });
     expect(restoredBeforeCooking.savedRecipes.find((item) => item.id === recipe.id)?.calories).toBeNull();
     expect(restoredBeforeCooking.inventory.find((item) => item.inventoryId === persistedBatch!.inventoryId)?.amount).toBe(3);
 

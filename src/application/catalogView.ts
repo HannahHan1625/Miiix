@@ -9,7 +9,7 @@ export type CatalogCategoryView = {
 
 export async function loadCatalogViewProjection(catalog: CatalogRepository) {
   const [details, categories, units, storageMethods] = await Promise.all([
-    catalog.findIngredients({ status: "active", limit: 1_000 }),
+    catalog.findIngredients({ status: "active", isSelectable: true, limit: 1_000 }),
     catalog.listCategories(),
     catalog.listUnits(),
     catalog.listStorageMethods(),
@@ -80,6 +80,10 @@ function toFoodInfo(
 
   return {
     id: ingredient.id,
+    conceptId: ingredient.conceptId,
+    variantId: ingredient.variantId,
+    formCode: ingredient.formCode,
+    processState: ingredient.processState,
     name: ingredient.canonicalNameZh,
     level1: categoryById.get(level1Id)?.nameZh ?? "未分类",
     level2: categoryById.get(level2Id)?.nameZh ?? "未分类",
